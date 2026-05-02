@@ -99,6 +99,37 @@ struct MeetingLibraryTests {
         #expect(meetings.map(\.title) == ["Newer", "Older"])
     }
 
+    @Test func parseDurationFindsLastTimestamp() {
+        let content = """
+        # Meeting Transcript — 2026-05-02 14:30
+
+        [0:00] me: Hi
+        [0:03] them: Hello
+        [12:45] me: Closing
+        """
+        let duration = MeetingLibrary.parseDuration(content: content)
+        #expect(duration == TimeInterval(12 * 60 + 45))
+    }
+
+    @Test func parseDurationReturnsNilWhenNoTimestamps() {
+        #expect(MeetingLibrary.parseDuration(content: "no timestamps here") == nil)
+    }
+
+    @Test func loadComputesDurationFromTranscript() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let summary = dir.appending(path: "meeting-2026-05-02-100000-summary.md")
+        let transcript = dir.appending(path: "meeting-2026-05-02-100000-transcript.md")
+        try "# Meeting — Test".write(to: summary, atomically: true, encoding: .utf8)
+        try "# Meeting Transcript — t\n[5:30] me: x\n".write(to: transcript, atomically: true, encoding: .utf8)
+
+        let meetings = try await MeetingLibrary.load(from: dir)
+        #expect(meetings.first?.durationSeconds == TimeInterval(5 * 60 + 30))
+        #expect(meetings.first?.durationLabel == "5 min")
+    }
+
     @Test func loadReturnsEmptyForMissingDirectory() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "snt-missing-\(UUID().uuidString)")
         let meetings = try await MeetingLibrary.load(from: dir)

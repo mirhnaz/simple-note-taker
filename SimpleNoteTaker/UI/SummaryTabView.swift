@@ -2,6 +2,9 @@ import AppKit
 import SwiftUI
 
 struct SummaryTabView: View {
+    /// When non-nil, loads this specific meeting. Otherwise loads the latest.
+    var meetingID: MeetingFile.ID?
+
     @State private var summary: MeetingSummary?
     @State private var transcriptText: String = ""
     @State private var summaryURL: URL?
@@ -32,7 +35,7 @@ struct SummaryTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task { await loadLatest() }
+        .task(id: meetingID) { await loadMeeting() }
         .task { await refreshOllamaModels() }
     }
 
@@ -186,26 +189,32 @@ struct SummaryTabView: View {
 
     // MARK: - Loading + regenerate
 
-    private func loadLatest() async {
+    private func loadMeeting() async {
         isLoading = true
         defer { isLoading = false }
         let dir = AppSettings.shared.notesDirectory
         let meetings = (try? await MeetingLibrary.load(from: dir)) ?? []
-        guard let latest = meetings.first else {
+        let target: MeetingFile?
+        if let meetingID {
+            target = meetings.first(where: { $0.id == meetingID }) ?? meetings.first
+        } else {
+            target = meetings.first
+        }
+        guard let target else {
             summary = nil
             summaryURL = nil
             transcriptText = ""
             meetingDate = nil
             return
         }
-        meetingDate = latest.recordedAt
-        let summarySource = latest.summaryURL ?? latest.legacyCombinedURL
+        meetingDate = target.recordedAt
+        let summarySource = target.summaryURL ?? target.legacyCombinedURL
         if let summarySource {
             summaryURL = summarySource
             let content = (try? String(contentsOf: summarySource, encoding: .utf8)) ?? ""
             summary = MeetingSummaryParser.parse(content: content)
         }
-        let transcriptSource = latest.transcriptURL ?? latest.legacyCombinedURL
+        let transcriptSource = target.transcriptURL ?? target.legacyCombinedURL
         if let transcriptSource {
             transcriptText = (try? String(contentsOf: transcriptSource, encoding: .utf8)) ?? ""
         } else {

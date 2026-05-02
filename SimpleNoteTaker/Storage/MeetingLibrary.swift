@@ -36,13 +36,17 @@ enum MeetingLibrary {
             let (title, snippet): (String, String?) = contentURL.map {
                 parseTitleAndSnippet(at: $0, fallbackDate: date)
             } ?? ("", nil)
+            // Duration comes from the last `[mm:ss]` timestamp in the
+            // transcript (or legacy combined) file.
+            let duration = parseDuration(at: urls.transcript ?? urls.legacy)
             return MeetingFile(
                 summaryURL: urls.summary,
                 transcriptURL: urls.transcript,
                 legacyCombinedURL: urls.legacy,
                 title: title,
                 recordedAt: date,
-                summarySnippet: snippet
+                summarySnippet: snippet,
+                durationSeconds: duration
             )
         }
 
@@ -102,6 +106,29 @@ enum MeetingLibrary {
     private static func parseTitleAndSnippet(at url: URL, fallbackDate: Date) -> (title: String, snippet: String?) {
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return ("", nil) }
         return parseTitleAndSnippet(content: content, fallbackDate: fallbackDate)
+    }
+
+    /// Last `[mm:ss]` timestamp in the file, in seconds. Used for the meeting
+    /// card's duration label.
+    static func parseDuration(content: String) -> TimeInterval? {
+        var lastSeconds: TimeInterval = 0
+        for raw in content.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("["), let close = line.firstIndex(of: "]") else { continue }
+            let inside = line[line.index(after: line.startIndex)..<close]
+            let parts = inside.split(separator: ":")
+            guard parts.count == 2,
+                  let mins = Int(parts[0]),
+                  let secs = Int(parts[1]) else { continue }
+            let total = TimeInterval(mins * 60 + secs)
+            if total > lastSeconds { lastSeconds = total }
+        }
+        return lastSeconds > 0 ? lastSeconds : nil
+    }
+
+    private static func parseDuration(at url: URL?) -> TimeInterval? {
+        guard let url, let content = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return parseDuration(content: content)
     }
 
     private static func firstMatch(_ content: String, prefix: String) -> String? {

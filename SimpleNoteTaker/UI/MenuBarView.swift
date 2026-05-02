@@ -29,9 +29,9 @@ struct MenuBarView: View {
 
             Divider()
 
-            menuItem("Open Library…", systemImage: "books.vertical") {
+            menuItem("Show Window", systemImage: "macwindow") {
                 AppActivation.shared.prepareToOpenWindow()
-                openWindow(id: "library")
+                openWindow(id: "main")
             }
 
             menuItem("Settings…", systemImage: "gearshape") {

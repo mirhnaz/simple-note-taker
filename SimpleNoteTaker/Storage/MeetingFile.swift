@@ -11,6 +11,7 @@ struct MeetingFile: Identifiable, Hashable, Sendable {
     let title: String
     let recordedAt: Date
     let summarySnippet: String?
+    let durationSeconds: TimeInterval?
 
     var id: Date { recordedAt }
 
@@ -26,6 +27,18 @@ struct MeetingFile: Identifiable, Hashable, Sendable {
 
     /// True for pre-M11.0 meetings that exist as a single combined .md file.
     var isLegacy: Bool { summaryURL == nil && legacyCombinedURL != nil }
+
+    /// Friendly duration string like "12 min" / "1h 24m". nil if unknown.
+    var durationLabel: String? {
+        guard let total = durationSeconds, total > 0 else { return nil }
+        let minutes = Int(total) / 60
+        if minutes < 60 {
+            return "\(max(1, minutes)) min"
+        }
+        let hours = minutes / 60
+        let rem = minutes % 60
+        return rem == 0 ? "\(hours)h" : "\(hours)h \(rem)m"
+    }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()

@@ -79,9 +79,9 @@ struct MainWindow: View {
         case .recording:
             RecordingTabView()
         case .summary:
-            SummaryTabView()
+            SummaryTabView(meetingID: viewModel.selectedMeetingID)
         case .meetings:
-            placeholder("Meetings tab — wired up in M11.4")
+            MeetingsTabView(viewModel: viewModel)
         }
     }
 

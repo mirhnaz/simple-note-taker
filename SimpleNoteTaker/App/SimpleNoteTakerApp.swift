@@ -18,11 +18,6 @@ struct SimpleNoteTakerApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Library", id: "library") {
-            LibraryWindow()
-        }
-        .defaultSize(width: 800, height: 560)
-
         Settings {
             SettingsWindow()
         }
