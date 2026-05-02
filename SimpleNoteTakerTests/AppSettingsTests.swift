@@ -52,4 +52,45 @@ struct AppSettingsTests {
         settings.defaults.set(false, forKey: SettingsKeys.retainAudioFiles)
         #expect(settings.retainAudioFiles == false)
     }
+
+    @Test func llmProviderDefaultsToApple() {
+        let settings = makeSettings()
+        #expect(settings.llmProvider == .apple)
+    }
+
+    @Test func llmProviderRoundTrips() {
+        let settings = makeSettings()
+        settings.defaults.set("ollama", forKey: SettingsKeys.llmProvider)
+        #expect(settings.llmProvider == .ollama)
+        settings.defaults.set("apple", forKey: SettingsKeys.llmProvider)
+        #expect(settings.llmProvider == .apple)
+    }
+
+    @Test func llmProviderUnknownStringFallsBackToApple() {
+        let settings = makeSettings()
+        settings.defaults.set("anthropic-cloud", forKey: SettingsKeys.llmProvider)
+        #expect(settings.llmProvider == .apple)
+    }
+
+    @Test func ollamaBaseURLDefaultsToLocalhost() {
+        let settings = makeSettings()
+        #expect(settings.ollamaBaseURL.absoluteString == AppSettings.defaultOllamaBaseURL)
+    }
+
+    @Test func ollamaBaseURLRespectsCustom() {
+        let settings = makeSettings()
+        settings.defaults.set("http://192.168.1.10:11434", forKey: SettingsKeys.ollamaBaseURL)
+        #expect(settings.ollamaBaseURL.absoluteString == "http://192.168.1.10:11434")
+    }
+
+    @Test func ollamaBaseURLEmptyFallsBackToDefault() {
+        let settings = makeSettings()
+        settings.defaults.set("", forKey: SettingsKeys.ollamaBaseURL)
+        #expect(settings.ollamaBaseURL.absoluteString == AppSettings.defaultOllamaBaseURL)
+    }
+
+    @Test func ollamaModelDefaultsToEmpty() {
+        let settings = makeSettings()
+        #expect(settings.ollamaModel == "")
+    }
 }

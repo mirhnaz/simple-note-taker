@@ -19,7 +19,8 @@ final class RecordingSession: AudioRecorder {
     private static let stopTimeoutSeconds: TimeInterval = 30
     private static let summaryTimeoutSeconds: TimeInterval = 60
 
-    static func start(settings: AppSettings = .shared, summarizer: any Summarizing = FoundationModelsSummarizer()) async throws -> RecordingSession {
+    static func start(settings: AppSettings = .shared, summarizer: (any Summarizing)? = nil) async throws -> RecordingSession {
+        let summarizer = summarizer ?? settings.makeSummarizer()
         let startedAt = Date()
         let directory = settings.retainAudioFiles
             ? settings.audioDirectory
