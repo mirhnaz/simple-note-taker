@@ -1,0 +1,72 @@
+import AVFoundation
+import Foundation
+import os
+
+private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "mlx-whisper")
+
+struct MLXWhisperTranscriber: FileTranscribing {
+    let model: String
+    let executablePathOverride: String
+
+    init(model: String, executablePathOverride: String = "") {
+        self.model = model
+        self.executablePathOverride = executablePathOverride
+    }
+
+    func transcribe(audioFile url: URL, kind: AudioKind) async throws -> [TranscriptSegment] {
+        guard let exec = MLXWhisperEnvironment.detectInstallation(overridePath: executablePathOverride) else {
+            throw MLXWhisperError.notInstalled
+        }
+        guard MLXWhisperEnvironment.isFFmpegInstalled() else {
+            throw MLXWhisperError.ffmpegMissing
+        }
+        let outputDir = FileManager.default.temporaryDirectory.appending(path: "snt-mlx-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputDir) }
+
+        log.info("transcribing \(url.lastPathComponent, privacy: .public) with model \(model, privacy: .public)")
+        let jsonURL = try await MLXWhisperEnvironment.runMLXWhisper(
+            executable: exec,
+            audio: url,
+            model: model,
+            outputDir: outputDir
+        )
+        let data = try Data(contentsOf: jsonURL)
+        return try Self.parseSegments(jsonData: data, kind: kind)
+    }
+
+    /// Parses a Whisper JSON output into `[TranscriptSegment]`. Tolerates the
+    /// "no segments key, only text" minimal shape (single segment from 0..duration).
+    static func parseSegments(jsonData: Data, kind: AudioKind) throws -> [TranscriptSegment] {
+        do {
+            let payload = try JSONDecoder().decode(WhisperOutput.self, from: jsonData)
+            if let segments = payload.segments, !segments.isEmpty {
+                return segments.map { seg in
+                    TranscriptSegment(
+                        kind: kind,
+                        startSeconds: seg.start,
+                        endSeconds: seg.end,
+                        text: seg.text.trimmingCharacters(in: .whitespaces)
+                    )
+                }
+            }
+            // Fallback: single-segment from text-only JSON
+            let text = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return [] }
+            return [TranscriptSegment(kind: kind, startSeconds: 0, endSeconds: 0, text: text)]
+        } catch {
+            throw MLXWhisperError.decodingFailed(underlying: error)
+        }
+    }
+
+    private struct WhisperOutput: Decodable {
+        let text: String
+        let segments: [WhisperSegment]?
+    }
+
+    private struct WhisperSegment: Decodable {
+        let start: Double
+        let end: Double
+        let text: String
+    }
+}

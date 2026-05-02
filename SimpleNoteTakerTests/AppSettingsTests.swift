@@ -93,4 +93,45 @@ struct AppSettingsTests {
         let settings = makeSettings()
         #expect(settings.ollamaModel == "")
     }
+
+    @Test func transcriptionProviderDefaultsToApple() {
+        let settings = makeSettings()
+        #expect(settings.transcriptionProvider == .apple)
+    }
+
+    @Test func transcriptionProviderRoundTrips() {
+        let settings = makeSettings()
+        settings.defaults.set("mlxWhisper", forKey: SettingsKeys.transcriptionProvider)
+        #expect(settings.transcriptionProvider == .mlxWhisper)
+        settings.defaults.set("apple", forKey: SettingsKeys.transcriptionProvider)
+        #expect(settings.transcriptionProvider == .apple)
+    }
+
+    @Test func transcriptionProviderUnknownStringFallsBackToApple() {
+        let settings = makeSettings()
+        settings.defaults.set("mystery-engine", forKey: SettingsKeys.transcriptionProvider)
+        #expect(settings.transcriptionProvider == .apple)
+    }
+
+    @Test func mlxWhisperModelDefaultsToConstant() {
+        let settings = makeSettings()
+        #expect(settings.mlxWhisperModel == AppSettings.defaultMLXWhisperModel)
+    }
+
+    @Test func mlxWhisperModelEmptyFallsBackToDefault() {
+        let settings = makeSettings()
+        settings.defaults.set("", forKey: SettingsKeys.mlxWhisperModel)
+        #expect(settings.mlxWhisperModel == AppSettings.defaultMLXWhisperModel)
+    }
+
+    @Test func mlxWhisperModelCustom() {
+        let settings = makeSettings()
+        settings.defaults.set("mlx-community/whisper-tiny", forKey: SettingsKeys.mlxWhisperModel)
+        #expect(settings.mlxWhisperModel == "mlx-community/whisper-tiny")
+    }
+
+    @Test func mlxWhisperPathDefaultsToEmpty() {
+        let settings = makeSettings()
+        #expect(settings.mlxWhisperPath == "")
+    }
 }

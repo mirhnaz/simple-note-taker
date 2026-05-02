@@ -1,0 +1,228 @@
+import AVFoundation
+import Foundation
+import os
+
+private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "mlx-whisper")
+
+enum MLXWhisperEnvironment {
+    /// Common locations where pip / Homebrew / conda put binaries. GUI apps
+    /// launched from Dock/Finder inherit a stripped-down PATH and won't see
+    /// these via `which`, so we probe them directly.
+    static let candidateBinDirs: [String] = {
+        let home = NSHomeDirectory()
+        var dirs = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "\(home)/.local/bin",
+            "\(home)/.pyenv/shims",
+            "\(home)/miniforge3/bin",
+            "\(home)/miniconda3/bin",
+            "\(home)/anaconda3/bin"
+        ]
+        for v in ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"] {
+            dirs.append("\(home)/Library/Python/\(v)/bin")
+        }
+        return dirs
+    }()
+
+    /// Resolves to a usable `mlx_whisper` executable: first the user override,
+    /// then a sweep of `candidateBinDirs`, then `/usr/bin/env which` as a last
+    /// resort. Returns nil if nothing is found.
+    static func detectInstallation(overridePath: String = "") -> URL? {
+        let trimmedOverride = overridePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedOverride.isEmpty {
+            let url = URL(filePath: trimmedOverride)
+            return FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false)) ? url : nil
+        }
+        for dir in candidateBinDirs {
+            let candidate = "\(dir)/mlx_whisper"
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return URL(filePath: candidate)
+            }
+        }
+        return whichOnPath("mlx_whisper")
+    }
+
+    /// PATH augmented with `candidateBinDirs` and the system PATH. mlx_whisper
+    /// is a Python script — its child python interpreter and any imported
+    /// console scripts need PATH set or they fall back to /usr/bin and break.
+    /// Specifically, mlx_whisper shells out to `ffmpeg` to load any audio
+    /// file, so ffmpeg must be reachable via this PATH.
+    static var augmentedPATH: String {
+        let existing = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let extras = candidateBinDirs.joined(separator: ":")
+        return "\(extras):\(existing)"
+    }
+
+    /// True if `ffmpeg` is reachable via the augmented PATH. mlx_whisper hard-
+    /// requires ffmpeg internally, so we surface this independently in Settings.
+    static func isFFmpegInstalled() -> Bool {
+        for dir in candidateBinDirs {
+            if FileManager.default.isExecutableFile(atPath: "\(dir)/ffmpeg") { return true }
+        }
+        return false
+    }
+
+    /// True if Hugging Face has the model snapshot directory locally.
+    /// HF caches under: ~/.cache/huggingface/hub/models--<owner>--<name>/snapshots/<rev>/
+    /// (replacing all `/` in the repo id with `--`).
+    static func isModelCached(_ name: String, fileManager: FileManager = .default) -> Bool {
+        let cacheURL = modelCacheURL(name)
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: cacheURL.path(percentEncoded: false), isDirectory: &isDir), isDir.boolValue else {
+            return false
+        }
+        // The dir exists; require at least one snapshot subdirectory with files in it.
+        let snapshotsDir = cacheURL.appending(path: "snapshots")
+        guard let snapshots = try? fileManager.contentsOfDirectory(atPath: snapshotsDir.path(percentEncoded: false)) else {
+            return false
+        }
+        return snapshots.contains { snap in
+            let dir = snapshotsDir.appending(path: snap)
+            let contents = (try? fileManager.contentsOfDirectory(atPath: dir.path(percentEncoded: false))) ?? []
+            return !contents.isEmpty
+        }
+    }
+
+    static func modelCacheURL(_ name: String) -> URL {
+        let folder = "models--" + name.replacingOccurrences(of: "/", with: "--")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appending(path: ".cache/huggingface/hub").appending(path: folder)
+    }
+
+    /// Generates a 0.5s silent .m4a in tmp, runs mlx-whisper on it (which forces
+    /// the model to download if not cached), then deletes the silent file and
+    /// any output JSON. Throws if mlx-whisper isn't installed or returns non-zero.
+    static func warmupDownload(model: String, overridePath: String = "") async throws {
+        guard let exec = detectInstallation(overridePath: overridePath) else {
+            throw MLXWhisperError.notInstalled
+        }
+        let tmpDir = FileManager.default.temporaryDirectory.appending(path: "snt-mlx-warmup-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let silenceURL = tmpDir.appending(path: "silence.m4a")
+        try writeSilentM4A(durationSeconds: 0.5, to: silenceURL)
+
+        _ = try await runMLXWhisper(executable: exec, audio: silenceURL, model: model, outputDir: tmpDir)
+        log.info("warmup completed for model: \(model, privacy: .public)")
+    }
+
+    /// Runs mlx-whisper and returns the path to the .json output it produced.
+    static func runMLXWhisper(executable: URL, audio: URL, model: String, outputDir: URL) async throws -> URL {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = [
+            audio.path(percentEncoded: false),
+            "--model", model,
+            "--output-format", "json",
+            "--output-dir", outputDir.path(percentEncoded: false)
+        ]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = augmentedPATH
+        process.environment = env
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try await Task.detached {
+            try process.run()
+            process.waitUntilExit()
+        }.value
+
+        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        guard process.terminationStatus == 0 else {
+            log.error("mlx_whisper exit \(Int(process.terminationStatus), privacy: .public). stderr: \(stderrText, privacy: .public)")
+            throw MLXWhisperError.processFailed(status: Int(process.terminationStatus), stderr: stderrText)
+        }
+        if !stderrText.isEmpty {
+            log.info("mlx_whisper stderr: \(stderrText, privacy: .public)")
+        }
+
+        let basename = (audio.lastPathComponent as NSString).deletingPathExtension
+        let expected = outputDir.appending(path: "\(basename).json")
+        if FileManager.default.fileExists(atPath: expected.path(percentEncoded: false)) {
+            return expected
+        }
+        // Fallback: pick any .json mlx_whisper happened to drop in the dir.
+        if let any = (try? FileManager.default.contentsOfDirectory(atPath: outputDir.path(percentEncoded: false)))?
+            .first(where: { $0.hasSuffix(".json") }) {
+            return outputDir.appending(path: any)
+        }
+        let listing = (try? FileManager.default.contentsOfDirectory(atPath: outputDir.path(percentEncoded: false))) ?? []
+        log.error("no json output. dir contents: \(listing, privacy: .public). stdout: \(stdoutText, privacy: .public). stderr: \(stderrText, privacy: .public)")
+        throw MLXWhisperError.outputMissing(expected: expected)
+    }
+
+    private static func whichOnPath(_ name: String) -> URL? {
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/env")
+        process.arguments = ["which", name]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = augmentedPATH
+        process.environment = env
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !path.isEmpty else { return nil }
+        return URL(filePath: path)
+    }
+
+    /// Writes a duration-second silent AAC .m4a to the given URL.
+    private static func writeSilentM4A(durationSeconds: Double, to url: URL) throws {
+        let sampleRate = 44_100.0
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+        let frameCount = AVAudioFrameCount(durationSeconds * sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw MLXWhisperError.silenceGenerationFailed
+        }
+        buffer.frameLength = frameCount
+        // PCM buffer is zero-initialized → already silent.
+        try file.write(from: buffer)
+    }
+}
+
+enum MLXWhisperError: LocalizedError {
+    case notInstalled
+    case ffmpegMissing
+    case processFailed(status: Int, stderr: String)
+    case outputMissing(expected: URL)
+    case decodingFailed(underlying: Error)
+    case silenceGenerationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .notInstalled:
+            return "mlx_whisper isn't on PATH. Install with `pip install mlx-whisper` and reopen Settings."
+        case .ffmpegMissing:
+            return "ffmpeg is required by mlx_whisper but wasn't found on PATH. Install with `brew install ffmpeg`."
+        case .processFailed(let status, let stderr):
+            return "mlx_whisper exited with status \(status): \(stderr.prefix(300))"
+        case .outputMissing(let url):
+            return "mlx_whisper finished but no JSON output was found at \(url.path(percentEncoded: false))."
+        case .decodingFailed(let underlying):
+            return "Couldn't decode mlx_whisper JSON: \(underlying.localizedDescription)"
+        case .silenceGenerationFailed:
+            return "Couldn't generate silent warm-up audio."
+        }
+    }
+}

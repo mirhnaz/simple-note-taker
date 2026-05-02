@@ -15,12 +15,21 @@ final class RecordingSession: AudioRecorder {
     private let notesDirectory: URL
     private let retainAudioFiles: Bool
     private let summarizer: any Summarizing
+    private let fileTranscriber: any FileTranscribing
+    private let useFilePassForMic: Bool
 
     private static let stopTimeoutSeconds: TimeInterval = 30
+    private static let fileTranscriptionTimeoutSeconds: TimeInterval = 600
     private static let summaryTimeoutSeconds: TimeInterval = 60
 
-    static func start(settings: AppSettings = .shared, summarizer: (any Summarizing)? = nil) async throws -> RecordingSession {
+    static func start(
+        settings: AppSettings = .shared,
+        summarizer: (any Summarizing)? = nil,
+        fileTranscriber: (any FileTranscribing)? = nil
+    ) async throws -> RecordingSession {
         let summarizer = summarizer ?? settings.makeSummarizer()
+        let fileTranscriber = fileTranscriber ?? settings.makeFileTranscriber()
+        let useFilePassForMic = settings.transcriptionProvider != .apple
         let startedAt = Date()
         let directory = settings.retainAudioFiles
             ? settings.audioDirectory
@@ -56,7 +65,9 @@ final class RecordingSession: AudioRecorder {
             micTranscriber: micTranscriber,
             notesDirectory: settings.notesDirectory,
             retainAudioFiles: settings.retainAudioFiles,
-            summarizer: summarizer
+            summarizer: summarizer,
+            fileTranscriber: fileTranscriber,
+            useFilePassForMic: useFilePassForMic
         )
     }
 
@@ -69,7 +80,9 @@ final class RecordingSession: AudioRecorder {
         micTranscriber: LiveTranscriber,
         notesDirectory: URL,
         retainAudioFiles: Bool,
-        summarizer: any Summarizing
+        summarizer: any Summarizing,
+        fileTranscriber: any FileTranscribing,
+        useFilePassForMic: Bool
     ) {
         self.startedAt = startedAt
         self.audioFiles = audioFiles
@@ -80,6 +93,8 @@ final class RecordingSession: AudioRecorder {
         self.notesDirectory = notesDirectory
         self.retainAudioFiles = retainAudioFiles
         self.summarizer = summarizer
+        self.fileTranscriber = fileTranscriber
+        self.useFilePassForMic = useFilePassForMic
     }
 
     func stop() async throws -> URL {
@@ -88,8 +103,17 @@ final class RecordingSession: AudioRecorder {
         await system?.stop()
         log.info("audio captures stopped, finalizing transcripts")
 
-        let micSegments = await stopMicTranscriber()
-        log.info("mic segments: \(micSegments.count, privacy: .public)")
+        // Always drain the live transcriber so its analyzer releases.
+        let liveMicSegments = await stopMicTranscriber()
+        log.info("live mic segments: \(liveMicSegments.count, privacy: .public)")
+
+        let micSegments: [TranscriptSegment]
+        if useFilePassForMic, let micURL = audioFiles[.mic] {
+            micSegments = await transcribeFromFile(url: micURL, kind: .mic)
+        } else {
+            micSegments = liveMicSegments
+        }
+        log.info("final mic segments: \(micSegments.count, privacy: .public)")
 
         let systemSegments = await transcribeSystemAudio()
         log.info("system segments: \(systemSegments.count, privacy: .public)")
@@ -157,12 +181,17 @@ final class RecordingSession: AudioRecorder {
 
     private func transcribeSystemAudio() async -> [TranscriptSegment] {
         guard let systemURL = audioFiles[.system] else { return [] }
+        return await transcribeFromFile(url: systemURL, kind: .system)
+    }
+
+    private func transcribeFromFile(url: URL, kind: AudioKind) async -> [TranscriptSegment] {
+        let transcriber = fileTranscriber
         do {
-            return try await withTimeout(seconds: Self.stopTimeoutSeconds) {
-                try await FileTranscriber.transcribe(audioFile: systemURL, kind: .system)
+            return try await withTimeout(seconds: Self.fileTranscriptionTimeoutSeconds) {
+                try await transcriber.transcribe(audioFile: url, kind: kind)
             }
         } catch {
-            log.error("system audio transcription failed/timed out: \(error.localizedDescription, privacy: .public)")
+            log.error("\(kind.rawValue, privacy: .public) file transcription failed/timed out: \(error.localizedDescription, privacy: .public)")
             return []
         }
     }
