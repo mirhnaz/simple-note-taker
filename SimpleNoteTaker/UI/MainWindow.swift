@@ -79,7 +79,7 @@ struct MainWindow: View {
         case .recording:
             RecordingTabView()
         case .summary:
-            placeholder("Summary tab — wired up in M11.3")
+            SummaryTabView()
         case .meetings:
             placeholder("Meetings tab — wired up in M11.4")
         }

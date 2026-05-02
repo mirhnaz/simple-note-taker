@@ -47,6 +47,21 @@ enum MarkdownWriter {
         """ + "\n"
     }
 
+    /// Writes JUST the summary file. Used by Regenerate so we don't
+    /// clobber the transcript with an empty segments array.
+    @discardableResult
+    static func writeSummary(
+        meetingDate: Date,
+        summary: MeetingSummary?,
+        to directory: URL
+    ) throws -> URL {
+        try Paths.ensureDirectoryExists(directory)
+        let url = directory.appending(path: MeetingFiles.summaryFilename(for: meetingDate))
+        let content = renderSummary(meetingDate: meetingDate, summary: summary)
+        try content.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     /// Writes both the summary and transcript files. Returns both URLs;
     /// `summaryURL` is the canonical "meeting" file users open by default.
     @discardableResult
