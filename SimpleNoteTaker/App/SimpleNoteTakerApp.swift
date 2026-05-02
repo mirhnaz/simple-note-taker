@@ -8,6 +8,11 @@ struct SimpleNoteTakerApp: App {
     }
 
     var body: some Scene {
+        Window("SimpleNoteTaker", id: "main") {
+            MainWindow()
+        }
+        .defaultSize(width: 900, height: 620)
+
         MenuBarExtra("SimpleNoteTaker", systemImage: "waveform.circle") {
             MenuBarView()
         }
