@@ -10,7 +10,18 @@ enum MeetingFiles {
         "meeting-\(timestamp(date, timeZone: timeZone))-\(kind.rawValue).m4a"
     }
 
+    static func summaryFilename(for date: Date, timeZone: TimeZone = .current) -> String {
+        "meeting-\(timestamp(date, timeZone: timeZone))-summary.md"
+    }
+
     static func transcriptFilename(for date: Date, timeZone: TimeZone = .current) -> String {
+        "meeting-\(timestamp(date, timeZone: timeZone))-transcript.md"
+    }
+
+    /// Pre-M11.0 layout — a single combined `meeting-<ts>.md` containing both
+    /// summary and transcript. Used only by `MeetingLibrary` for legacy
+    /// detection; nothing writes this any more.
+    static func legacyCombinedFilename(for date: Date, timeZone: TimeZone = .current) -> String {
         "meeting-\(timestamp(date, timeZone: timeZone)).md"
     }
 

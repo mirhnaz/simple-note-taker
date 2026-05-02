@@ -150,12 +150,12 @@ private struct MeetingDetailView: View {
                 }
                 Spacer()
                 Button {
-                    NSWorkspace.shared.open(meeting.url)
+                    NSWorkspace.shared.open(meeting.primaryURL)
                 } label: {
                     Label("Open", systemImage: "arrow.up.right.square")
                 }
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([meeting.url])
+                    NSWorkspace.shared.activateFileViewerSelecting([meeting.primaryURL])
                 } label: {
                     Label("Reveal", systemImage: "folder")
                 }
@@ -173,12 +173,12 @@ private struct MeetingDetailView: View {
                 }
             }
         }
-        .task(id: meeting.url) { await loadContent() }
+        .task(id: meeting.primaryURL) { await loadContent() }
     }
 
     private func loadContent() async {
         do {
-            content = try String(contentsOf: meeting.url, encoding: .utf8)
+            content = try String(contentsOf: meeting.primaryURL, encoding: .utf8)
             loadError = nil
         } catch {
             content = ""

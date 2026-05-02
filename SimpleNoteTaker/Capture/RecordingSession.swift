@@ -122,13 +122,14 @@ final class RecordingSession: AudioRecorder {
         let summary = await summarize(allSegments)
         log.info("summary: \(summary == nil ? "(none)" : "ok", privacy: .public)")
 
-        let url = try MarkdownWriter.write(
+        let written = try MarkdownWriter.write(
             meetingDate: startedAt,
             segments: allSegments,
             summary: summary,
             to: notesDirectory
         )
-        log.info("wrote markdown: \(url.lastPathComponent, privacy: .public)")
+        let url = written.summaryURL
+        log.info("wrote summary + transcript: \(written.summaryURL.lastPathComponent, privacy: .public), \(written.transcriptURL.lastPathComponent, privacy: .public)")
 
         if !retainAudioFiles {
             cleanupAudioFiles()

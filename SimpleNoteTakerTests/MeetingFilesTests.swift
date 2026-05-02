@@ -28,7 +28,15 @@ struct MeetingFilesTests {
         #expect(MeetingFiles.audioFilename(for: date, kind: .system, timeZone: utc) == "meeting-2026-05-02-143005-system.m4a")
     }
 
+    @Test func summaryFilename() {
+        #expect(MeetingFiles.summaryFilename(for: date, timeZone: utc) == "meeting-2026-05-02-143005-summary.md")
+    }
+
     @Test func transcriptFilename() {
-        #expect(MeetingFiles.transcriptFilename(for: date, timeZone: utc) == "meeting-2026-05-02-143005.md")
+        #expect(MeetingFiles.transcriptFilename(for: date, timeZone: utc) == "meeting-2026-05-02-143005-transcript.md")
+    }
+
+    @Test func legacyCombinedFilename() {
+        #expect(MeetingFiles.legacyCombinedFilename(for: date, timeZone: utc) == "meeting-2026-05-02-143005.md")
     }
 }

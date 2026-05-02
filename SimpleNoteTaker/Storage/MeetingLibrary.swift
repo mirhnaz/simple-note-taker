@@ -1,8 +1,15 @@
 import Foundation
 
+enum MeetingFileKind: Sendable {
+    case summary
+    case transcript
+    case legacyCombined
+}
+
 enum MeetingLibrary {
-    /// Scans the given directory for meeting markdown files (`meeting-*.md`)
-    /// and returns them parsed and sorted by recordedAt descending (newest first).
+    /// Scans the directory for `meeting-*.md` files, groups by base timestamp,
+    /// and returns one MeetingFile per meeting (regardless of how many of its
+    /// files exist). Sorted newest first.
     static func load(from directory: URL) async throws -> [MeetingFile] {
         let fm = FileManager.default
         guard fm.fileExists(atPath: directory.path(percentEncoded: false)) else { return [] }
@@ -10,31 +17,72 @@ enum MeetingLibrary {
         let urls = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         let mdURLs = urls.filter { $0.pathExtension.lowercased() == "md" && $0.lastPathComponent.hasPrefix("meeting-") }
 
-        let files: [MeetingFile] = mdURLs.compactMap { url in
-            guard let recordedAt = parseDate(from: url.lastPathComponent) else { return nil }
-            let (title, snippet) = parseTitleAndSnippet(at: url, fallbackDate: recordedAt)
-            return MeetingFile(url: url, title: title, recordedAt: recordedAt, summarySnippet: snippet)
+        var byDate: [Date: (summary: URL?, transcript: URL?, legacy: URL?)] = [:]
+        for url in mdURLs {
+            guard let parsed = parseMeetingFilename(url.lastPathComponent) else { continue }
+            var entry = byDate[parsed.date] ?? (nil, nil, nil)
+            switch parsed.kind {
+            case .summary: entry.summary = url
+            case .transcript: entry.transcript = url
+            case .legacyCombined: entry.legacy = url
+            }
+            byDate[parsed.date] = entry
+        }
+
+        let files: [MeetingFile] = byDate.compactMap { date, urls in
+            // Need a content source for the title/snippet — prefer summary, then legacy.
+            // Pure transcript-only meetings still appear, with transcript URL only.
+            let contentURL = urls.summary ?? urls.legacy
+            let (title, snippet): (String, String?) = contentURL.map {
+                parseTitleAndSnippet(at: $0, fallbackDate: date)
+            } ?? ("", nil)
+            return MeetingFile(
+                summaryURL: urls.summary,
+                transcriptURL: urls.transcript,
+                legacyCombinedURL: urls.legacy,
+                title: title,
+                recordedAt: date,
+                summarySnippet: snippet
+            )
         }
 
         return files.sorted { $0.recordedAt > $1.recordedAt }
     }
 
-    /// Parses the timestamp from filenames like `meeting-2026-05-02-143000.md`.
-    static func parseDate(from filename: String) -> Date? {
+    /// Parses `meeting-YYYY-MM-DD-HHMMSS-summary.md`,
+    /// `meeting-YYYY-MM-DD-HHMMSS-transcript.md`, or the legacy
+    /// `meeting-YYYY-MM-DD-HHMMSS.md`. Returns nil for non-matching names.
+    static func parseMeetingFilename(_ filename: String) -> (date: Date, kind: MeetingFileKind)? {
         let stem = (filename as NSString).deletingPathExtension
         guard stem.hasPrefix("meeting-") else { return nil }
-        let timestamp = String(stem.dropFirst("meeting-".count))
-        return dateParser.date(from: timestamp)
+        let body = String(stem.dropFirst("meeting-".count))
+
+        if body.hasSuffix("-summary"),
+           let date = dateParser.date(from: String(body.dropLast("-summary".count))) {
+            return (date, .summary)
+        }
+        if body.hasSuffix("-transcript"),
+           let date = dateParser.date(from: String(body.dropLast("-transcript".count))) {
+            return (date, .transcript)
+        }
+        if let date = dateParser.date(from: body) {
+            return (date, .legacyCombined)
+        }
+        return nil
     }
 
-    /// Reads the file (up to a small prefix) and extracts the H1 title and a
-    /// short snippet from the `## Summary` body, if present.
+    /// Back-compat shim — returns the timestamp regardless of suffix.
+    static func parseDate(from filename: String) -> Date? {
+        parseMeetingFilename(filename)?.date
+    }
+
+    /// Reads a file (prefix-only is fine for this purpose) and extracts the
+    /// H1 title and a short snippet from the `## Summary` body, if present.
     static func parseTitleAndSnippet(content: String, fallbackDate: Date) -> (title: String, snippet: String?) {
         var title = ""
         if let h1 = firstMatch(content, prefix: "# Meeting — ") {
             title = h1.trimmingCharacters(in: .whitespaces)
         }
-        // Treat a title that's just the recorded-at timestamp as "no model title".
         if title == fallbackDateString(fallbackDate) {
             title = ""
         }

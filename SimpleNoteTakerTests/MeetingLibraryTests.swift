@@ -3,20 +3,32 @@ import Testing
 @testable import SimpleNoteTaker
 
 struct MeetingLibraryTests {
-    @Test func parsesDateFromMeetingFilename() {
-        let date = MeetingLibrary.parseDate(from: "meeting-2026-05-02-143000.md")
-        let components = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day, .hour, .minute, .second], from: date!)
+    @Test func parsesSummaryFilename() {
+        let parsed = MeetingLibrary.parseMeetingFilename("meeting-2026-05-02-143000-summary.md")
+        #expect(parsed != nil)
+        #expect(parsed?.kind == .summary)
+        let components = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day, .hour, .minute, .second], from: parsed!.date)
         #expect(components.year == 2026)
         #expect(components.month == 5)
         #expect(components.day == 2)
         #expect(components.hour == 14)
         #expect(components.minute == 30)
-        #expect(components.second == 0)
+    }
+
+    @Test func parsesTranscriptFilename() {
+        let parsed = MeetingLibrary.parseMeetingFilename("meeting-2026-05-02-143000-transcript.md")
+        #expect(parsed?.kind == .transcript)
+    }
+
+    @Test func parsesLegacyCombinedFilename() {
+        let parsed = MeetingLibrary.parseMeetingFilename("meeting-2026-05-02-143000.md")
+        #expect(parsed?.kind == .legacyCombined)
     }
 
     @Test func returnsNilForNonMeetingFilename() {
-        #expect(MeetingLibrary.parseDate(from: "random.md") == nil)
-        #expect(MeetingLibrary.parseDate(from: "meeting-bad.md") == nil)
+        #expect(MeetingLibrary.parseMeetingFilename("random.md") == nil)
+        #expect(MeetingLibrary.parseMeetingFilename("meeting-bad.md") == nil)
+        #expect(MeetingLibrary.parseMeetingFilename("meeting-bad-summary.md") == nil)
     }
 
     @Test func parsesTitleFromH1() {
@@ -28,60 +40,63 @@ struct MeetingLibraryTests {
         ## Summary
         Discussed pipeline priorities.
 
-        ## Transcript
-        ...
+        ## Key Points
+        - Reviewed backlog
         """
         let (title, snippet) = MeetingLibrary.parseTitleAndSnippet(content: content, fallbackDate: Date())
         #expect(title == "Q3 roadmap sync")
         #expect(snippet == "Discussed pipeline priorities.")
     }
 
-    @Test func returnsBlankTitleWhenH1MatchesFallbackDate() {
-        let date = Date(timeIntervalSince1970: 1_746_198_600) // 2026-05-02 14:30 UTC
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        let timestamp = f.string(from: date)
-        let content = """
-        # Meeting — \(timestamp)
-
-        ## Transcript
-        body
-        """
-        let (title, _) = MeetingLibrary.parseTitleAndSnippet(content: content, fallbackDate: date)
-        #expect(title.isEmpty)
-    }
-
-    @Test func returnsNilSnippetWhenSummarySectionMissing() {
-        let content = """
-        # Meeting — Standup
-
-        ## Transcript
-        [0:00] me: hi
-        """
-        let (_, snippet) = MeetingLibrary.parseTitleAndSnippet(content: content, fallbackDate: Date())
-        #expect(snippet == nil)
-    }
-
-    @Test func loadScansDirectoryAndSortsNewestFirst() async throws {
+    @Test func loadGroupsSummaryAndTranscriptByTimestamp() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let older = dir.appending(path: "meeting-2026-05-01-100000.md")
-        let newer = dir.appending(path: "meeting-2026-05-02-100000.md")
-        try "# Meeting — Older\n\n## Transcript\nx".write(to: older, atomically: true, encoding: .utf8)
-        try "# Meeting — Newer\n\n## Summary\nA snippet.\n\n## Transcript\nx".write(to: newer, atomically: true, encoding: .utf8)
-
-        // Bystander files should be ignored.
-        try "ignore me".write(to: dir.appending(path: "notes.md"), atomically: true, encoding: .utf8)
-        try "also ignore".write(to: dir.appending(path: "meeting-bad.md"), atomically: true, encoding: .utf8)
+        let summary = dir.appending(path: "meeting-2026-05-02-100000-summary.md")
+        let transcript = dir.appending(path: "meeting-2026-05-02-100000-transcript.md")
+        try "# Meeting — Paired\n\n## Summary\nA snippet.".write(to: summary, atomically: true, encoding: .utf8)
+        try "# Meeting Transcript — 2026-05-02 10:00\n\n[0:00] me: hi".write(to: transcript, atomically: true, encoding: .utf8)
 
         let meetings = try await MeetingLibrary.load(from: dir)
-        #expect(meetings.count == 2)
-        #expect(meetings[0].title == "Newer")
-        #expect(meetings[0].summarySnippet == "A snippet.")
-        #expect(meetings[1].title == "Older")
+        #expect(meetings.count == 1)
+        #expect(meetings[0].title == "Paired")
+        #expect(meetings[0].summaryURL?.lastPathComponent == summary.lastPathComponent)
+        #expect(meetings[0].transcriptURL?.lastPathComponent == transcript.lastPathComponent)
+        #expect(meetings[0].legacyCombinedURL == nil)
+        #expect(meetings[0].isLegacy == false)
+        #expect(meetings[0].primaryURL.lastPathComponent == summary.lastPathComponent)
+    }
+
+    @Test func loadHandlesLegacyCombinedAlone() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let legacy = dir.appending(path: "meeting-2026-05-02-100000.md")
+        try "# Meeting — Legacy Combined\n\n## Summary\nPre-split file.".write(to: legacy, atomically: true, encoding: .utf8)
+
+        let meetings = try await MeetingLibrary.load(from: dir)
+        #expect(meetings.count == 1)
+        #expect(meetings[0].isLegacy == true)
+        #expect(meetings[0].summaryURL == nil)
+        #expect(meetings[0].transcriptURL == nil)
+        #expect(meetings[0].legacyCombinedURL?.lastPathComponent == legacy.lastPathComponent)
+        #expect(meetings[0].primaryURL.lastPathComponent == legacy.lastPathComponent)
+    }
+
+    @Test func loadSortsNewestFirst() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let older = dir.appending(path: "meeting-2026-05-01-100000-summary.md")
+        let newer = dir.appending(path: "meeting-2026-05-02-100000-summary.md")
+        try "# Meeting — Older".write(to: older, atomically: true, encoding: .utf8)
+        try "# Meeting — Newer".write(to: newer, atomically: true, encoding: .utf8)
+
+        let meetings = try await MeetingLibrary.load(from: dir)
+        #expect(meetings.map(\.title) == ["Newer", "Older"])
     }
 
     @Test func loadReturnsEmptyForMissingDirectory() async throws {
