@@ -6,11 +6,27 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		490CA0B22FA5E6BB00A1EDCA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 49A061572FA5DE0D0048EF65 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 49A0615E2FA5DE0D0048EF65;
+			remoteInfo = SimpleNoteTaker;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		490CA0AE2FA5E6BB00A1EDCA /* SimpleNoteTakerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SimpleNoteTakerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		49A0615F2FA5DE0D0048EF65 /* SimpleNoteTaker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleNoteTaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		490CA0AF2FA5E6BB00A1EDCA /* SimpleNoteTakerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SimpleNoteTakerTests;
+			sourceTree = "<group>";
+		};
 		49A061612FA5DE0D0048EF65 /* SimpleNoteTaker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SimpleNoteTaker;
@@ -19,6 +35,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		490CA0AB2FA5E6BB00A1EDCA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		49A0615C2FA5DE0D0048EF65 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				49A061612FA5DE0D0048EF65 /* SimpleNoteTaker */,
+				490CA0AF2FA5E6BB00A1EDCA /* SimpleNoteTakerTests */,
 				49A061602FA5DE0D0048EF65 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				49A0615F2FA5DE0D0048EF65 /* SimpleNoteTaker.app */,
+				490CA0AE2FA5E6BB00A1EDCA /* SimpleNoteTakerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +73,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		490CA0AD2FA5E6BB00A1EDCA /* SimpleNoteTakerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 490CA0B42FA5E6BB00A1EDCA /* Build configuration list for PBXNativeTarget "SimpleNoteTakerTests" */;
+			buildPhases = (
+				490CA0AA2FA5E6BB00A1EDCA /* Sources */,
+				490CA0AB2FA5E6BB00A1EDCA /* Frameworks */,
+				490CA0AC2FA5E6BB00A1EDCA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				490CA0B32FA5E6BB00A1EDCA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				490CA0AF2FA5E6BB00A1EDCA /* SimpleNoteTakerTests */,
+			);
+			name = SimpleNoteTakerTests;
+			packageProductDependencies = (
+			);
+			productName = SimpleNoteTakerTests;
+			productReference = 490CA0AE2FA5E6BB00A1EDCA /* SimpleNoteTakerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		49A0615E2FA5DE0D0048EF65 /* SimpleNoteTaker */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 49A0616A2FA5DE0E0048EF65 /* Build configuration list for PBXNativeTarget "SimpleNoteTaker" */;
@@ -80,6 +128,10 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					490CA0AD2FA5E6BB00A1EDCA = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 49A0615E2FA5DE0D0048EF65;
+					};
 					49A0615E2FA5DE0D0048EF65 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -100,11 +152,19 @@
 			projectRoot = "";
 			targets = (
 				49A0615E2FA5DE0D0048EF65 /* SimpleNoteTaker */,
+				490CA0AD2FA5E6BB00A1EDCA /* SimpleNoteTakerTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		490CA0AC2FA5E6BB00A1EDCA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		49A0615D2FA5DE0D0048EF65 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +175,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		490CA0AA2FA5E6BB00A1EDCA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		49A0615B2FA5DE0D0048EF65 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +191,57 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		490CA0B32FA5E6BB00A1EDCA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 49A0615E2FA5DE0D0048EF65 /* SimpleNoteTaker */;
+			targetProxy = 490CA0B22FA5E6BB00A1EDCA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		490CA0B52FA5E6BB00A1EDCA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J45N4Q75G2;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mir.SimpleNoteTakerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SimpleNoteTaker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SimpleNoteTaker";
+			};
+			name = Debug;
+		};
+		490CA0B62FA5E6BB00A1EDCA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J45N4Q75G2;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mir.SimpleNoteTakerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SimpleNoteTaker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SimpleNoteTaker";
+			};
+			name = Release;
+		};
 		49A061682FA5DE0E0048EF65 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -248,22 +365,42 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = J45N4Q75G2;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records your microphone during meetings to transcribe locally on-device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Transcribes your meetings on-device using Apple Speech.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mir.SimpleNoteTaker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -278,22 +415,42 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = J45N4Q75G2;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records your microphone during meetings to transcribe locally on-device.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Transcribes your meetings on-device using Apple Speech.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mir.SimpleNoteTaker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -306,6 +463,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		490CA0B42FA5E6BB00A1EDCA /* Build configuration list for PBXNativeTarget "SimpleNoteTakerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				490CA0B52FA5E6BB00A1EDCA /* Debug */,
+				490CA0B62FA5E6BB00A1EDCA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		49A0615A2FA5DE0D0048EF65 /* Build configuration list for PBXProject "SimpleNoteTaker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
