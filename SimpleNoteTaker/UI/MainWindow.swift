@@ -77,7 +77,7 @@ struct MainWindow: View {
     private var content: some View {
         switch viewModel.selectedTab {
         case .recording:
-            placeholder("Recording tab — wired up in M11.2")
+            RecordingTabView()
         case .summary:
             placeholder("Summary tab — wired up in M11.3")
         case .meetings:
