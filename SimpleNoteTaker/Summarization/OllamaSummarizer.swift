@@ -8,19 +8,14 @@ private let meetingSummarySchema: [String: Any] = [
     "type": "object",
     "properties": [
         "title": ["type": "string"],
+        "headline": ["type": "string"],
         "summary": ["type": "string"],
+        "keyPoints": ["type": "array", "items": ["type": "string"]],
         "actionItems": ["type": "array", "items": ["type": "string"]],
         "decisions": ["type": "array", "items": ["type": "string"]]
     ],
-    "required": ["title", "summary", "actionItems", "decisions"]
+    "required": ["title", "headline", "summary", "keyPoints", "actionItems", "decisions"]
 ]
-
-private let systemPrompt = """
-You read transcripts of business meetings and extract a brief title, a 2–4 sentence \
-summary of what was discussed, any explicit action items, and any explicit decisions. \
-Use only what is in the transcript; do not invent details. If no action items or \
-decisions were stated, return empty arrays. Respond with JSON only.
-"""
 
 struct OllamaSummarizer: Summarizing {
     let baseURL: URL
@@ -43,8 +38,8 @@ struct OllamaSummarizer: Summarizing {
 
         let client = OllamaClient(baseURL: baseURL, session: session)
         let messages: [OllamaChatMessage] = [
-            .init(role: "system", content: systemPrompt),
-            .init(role: "user", content: "Transcript:\n\n\(trimmed)")
+            .init(role: "system", content: SummarizationGuidelines.systemPrompt + "\n\nRespond with JSON only."),
+            .init(role: "user", content: SummarizationGuidelines.userPrompt(transcript: trimmed))
         ]
         do {
             let raw = try await client.chat(model: model, messages: messages, format: meetingSummarySchema)
@@ -90,13 +85,15 @@ extension MeetingSummary: Decodable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             title: try c.decode(String.self, forKey: .title),
+            headline: try c.decodeIfPresent(String.self, forKey: .headline) ?? "",
             summary: try c.decode(String.self, forKey: .summary),
+            keyPoints: try c.decodeIfPresent([String].self, forKey: .keyPoints) ?? [],
             actionItems: try c.decodeIfPresent([String].self, forKey: .actionItems) ?? [],
             decisions: try c.decodeIfPresent([String].self, forKey: .decisions) ?? []
         )
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, summary, actionItems, decisions
+        case title, headline, summary, keyPoints, actionItems, decisions
     }
 }

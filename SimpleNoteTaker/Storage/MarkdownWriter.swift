@@ -18,7 +18,11 @@ enum MarkdownWriter {
         var sections: [String] = ["# Meeting — \(title)", "_Recorded \(dateLabel)_"]
 
         if let summary {
+            if !summary.headline.isEmpty {
+                sections.append("**\(summary.headline)**")
+            }
             sections.append("## Summary\n\(summary.summary)")
+            sections.append("## Key Points\n\(renderList(summary.keyPoints))")
             sections.append("## Action Items\n\(renderList(summary.actionItems))")
             sections.append("## Decisions\n\(renderList(summary.decisions))")
         }

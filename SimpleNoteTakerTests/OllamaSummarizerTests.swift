@@ -7,14 +7,18 @@ struct OllamaSummarizerTests {
         let raw = """
         {
           "title": "Q3 plan",
+          "headline": "Team committed to ship import refactor in Q3.",
           "summary": "Discussed roadmap.",
+          "keyPoints": ["Pipeline backlog", "Import is priority"],
           "actionItems": ["Naz to draft RFC"],
           "decisions": ["Ship in Q3"]
         }
         """
         let summary = try OllamaSummarizer.decode(rawJSON: raw)
         #expect(summary.title == "Q3 plan")
+        #expect(summary.headline == "Team committed to ship import refactor in Q3.")
         #expect(summary.summary == "Discussed roadmap.")
+        #expect(summary.keyPoints == ["Pipeline backlog", "Import is priority"])
         #expect(summary.actionItems == ["Naz to draft RFC"])
         #expect(summary.decisions == ["Ship in Q3"])
     }
@@ -35,11 +39,13 @@ struct OllamaSummarizerTests {
         #expect(summary.decisions.isEmpty)
     }
 
-    @Test func tolerantOfMissingArrays() throws {
+    @Test func tolerantOfMissingArraysAndHeadline() throws {
         let raw = """
         {"title": "X", "summary": "Y"}
         """
         let summary = try OllamaSummarizer.decode(rawJSON: raw)
+        #expect(summary.headline == "")
+        #expect(summary.keyPoints.isEmpty)
         #expect(summary.actionItems.isEmpty)
         #expect(summary.decisions.isEmpty)
     }

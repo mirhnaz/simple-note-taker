@@ -36,24 +36,32 @@ struct MarkdownWriterTests {
     @Test func rendersSummarySectionsWhenSummaryProvided() {
         let summary = MeetingSummary(
             title: "Q3 roadmap sync",
+            headline: "Team aligned on Q3 import refactor and split RFC ownership.",
             summary: "Discussed pipeline priorities and reassigned ownership of the import workstream.",
+            keyPoints: ["Pipeline backlog reviewed", "Import workstream is the bottleneck"],
             actionItems: ["Naz to draft RFC", "Sam to schedule review"],
             decisions: ["Ship import refactor in Q3"]
         )
         let rendered = MarkdownWriter.render(meetingDate: meetingDate, segments: [], summary: summary, timeZone: utc)
         #expect(rendered.contains("# Meeting — Q3 roadmap sync"))
         #expect(rendered.contains("_Recorded 2026-05-02 14:30_"))
+        #expect(rendered.contains("**Team aligned on Q3 import refactor"))
         #expect(rendered.contains("## Summary\nDiscussed pipeline priorities"))
+        #expect(rendered.contains("## Key Points"))
+        #expect(rendered.contains("- Pipeline backlog reviewed"))
+        #expect(rendered.contains("- Import workstream is the bottleneck"))
         #expect(rendered.contains("- Naz to draft RFC"))
         #expect(rendered.contains("- Sam to schedule review"))
         #expect(rendered.contains("- Ship import refactor in Q3"))
     }
 
-    @Test func rendersEmptyListPlaceholdersForEmptyActionsAndDecisions() {
-        let summary = MeetingSummary(title: "T", summary: "S", actionItems: [], decisions: [])
+    @Test func rendersEmptyListPlaceholdersForEmptyArrays() {
+        let summary = MeetingSummary(title: "T", headline: "", summary: "S", keyPoints: [], actionItems: [], decisions: [])
         let rendered = MarkdownWriter.render(meetingDate: meetingDate, segments: [], summary: summary, timeZone: utc)
+        #expect(rendered.contains("## Key Points\n_(none)_"))
         #expect(rendered.contains("## Action Items\n_(none)_"))
         #expect(rendered.contains("## Decisions\n_(none)_"))
+        #expect(!rendered.contains("**\n"), "headline should be omitted when empty")
     }
 
     @Test func writeCreatesFileAndDirectory() throws {
