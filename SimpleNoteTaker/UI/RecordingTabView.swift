@@ -99,60 +99,46 @@ struct RecordingTabView: View {
     private func liveSegmentsView(session: RecordingSession) -> some View {
         let segments = session.micTranscriber.segments
         let partial = session.micTranscriber.currentPartial
-        return VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
-                segmentCard(time: seg.startSeconds, text: seg.text, isLive: false)
-            }
-            if !partial.isEmpty && partial != segments.last?.text {
-                segmentCard(time: nil, text: partial, isLive: true)
-            }
-            if segments.isEmpty && partial.isEmpty {
-                Text("Listening for speech…")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .padding(18)
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func segmentCard(time: TimeInterval?, text: String, isLive: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let time {
-                    Text(formatTimestamp(time))
-                        .font(.caption)
+        let consolidated = consolidate(segments: segments, partial: partial)
+        return ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                if consolidated.isEmpty {
+                    Text("Listening for speech…")
+                        .font(.body)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 40)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 } else {
-                    Text("now")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if isLive {
-                    Text("LIVE")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(.gray.opacity(0.18)))
+                    Text(consolidated)
+                        .font(.body)
+                        .lineSpacing(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                    Color.clear.frame(height: 1).id("liveTranscriptBottom")
                 }
             }
-            Text(text)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .onChange(of: consolidated) { _, _ in
+                withAnimation { proxy.scrollTo("liveTranscriptBottom", anchor: .bottom) }
+            }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(.background.secondary)
-        )
     }
 
-    private var idlePlaceholder: some View {
+    /// Joins all final segments into a single flowing paragraph and appends
+    /// the in-progress partial when it has new text the segments don't yet
+    /// reflect. SpeechAnalyzer often emits the partial = last segment, so we
+    /// avoid double-printing in that case.
+    private func consolidate(segments: [TranscriptSegment], partial: String) -> String {
+        var pieces = segments.map { $0.text.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let trimmedPartial = partial.trimmingCharacters(in: .whitespaces)
+        if !trimmedPartial.isEmpty && trimmedPartial != pieces.last {
+            pieces.append(trimmedPartial)
+        }
+        return pieces.joined(separator: " ")
+    }
+
+private var idlePlaceholder: some View {
         VStack(spacing: 12) {
             Spacer(minLength: 60)
             Image(systemName: "mic.circle")
