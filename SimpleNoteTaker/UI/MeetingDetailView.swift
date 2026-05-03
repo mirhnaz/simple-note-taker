@@ -1,14 +1,15 @@
 import AppKit
 import SwiftUI
 
-struct SummaryTabView: View {
-    /// When non-nil, loads this specific meeting. Otherwise loads the latest.
-    var meetingID: MeetingFile.ID?
+/// Per-meeting detail window: shows the AI summary cards (headline, summary,
+/// key points, action items, decisions). Lives in its own Window scene so
+/// multiple meetings can be open side-by-side. Loaded by recordedAt date.
+struct MeetingDetailView: View {
+    var meetingDate: Date
 
     @State private var summary: MeetingSummary?
     @State private var transcriptText: String = ""
     @State private var summaryURL: URL?
-    @State private var meetingDate: Date?
     @State private var isLoading = false
     @State private var isRegenerating = false
     @State private var availableOllamaModels: [String] = []
@@ -35,8 +36,14 @@ struct SummaryTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: meetingID) { await loadMeeting() }
+        .navigationTitle(navigationTitle)
+        .task(id: meetingDate) { await loadMeeting() }
         .task { await refreshOllamaModels() }
+    }
+
+    private var navigationTitle: String {
+        if let title = summary?.title, !title.isEmpty { return title }
+        return meetingDate.formatted(date: .abbreviated, time: .shortened)
     }
 
     // MARK: - Header
@@ -63,13 +70,13 @@ struct SummaryTabView: View {
     private var regenerateMenu: some View {
         Menu {
             Button("Apple Foundation Models") {
-                Task { await regenerate(provider: .apple, ollamaModelOverride: nil) }
+                Task { await regenerate(provider: .apple, ollamaModelOverride: nil, label: "Apple Foundation Models") }
             }
             if !availableOllamaModels.isEmpty {
                 Section("Ollama") {
                     ForEach(availableOllamaModels, id: \.self) { name in
                         Button(name) {
-                            Task { await regenerate(provider: .ollama, ollamaModelOverride: name) }
+                            Task { await regenerate(provider: .ollama, ollamaModelOverride: name, label: "Ollama: \(name)") }
                         }
                     }
                 }
@@ -89,7 +96,7 @@ struct SummaryTabView: View {
             }
         }
         .menuStyle(.borderlessButton)
-        .disabled(summary == nil || isRegenerating || transcriptText.isEmpty || meetingDate == nil)
+        .disabled(summary == nil || isRegenerating || transcriptText.isEmpty)
         .help("Re-run the summarizer; pick a model to override the default for this regeneration only.")
     }
 
@@ -179,9 +186,6 @@ struct SummaryTabView: View {
             Text("No summary yet")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("Record a meeting and the AI summary will appear here.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             Spacer(minLength: 60)
         }
         .frame(maxWidth: .infinity)
@@ -194,20 +198,12 @@ struct SummaryTabView: View {
         defer { isLoading = false }
         let dir = AppSettings.shared.notesDirectory
         let meetings = (try? await MeetingLibrary.load(from: dir)) ?? []
-        let target: MeetingFile?
-        if let meetingID {
-            target = meetings.first(where: { $0.id == meetingID }) ?? meetings.first
-        } else {
-            target = meetings.first
-        }
-        guard let target else {
+        guard let target = meetings.first(where: { $0.recordedAt == meetingDate }) else {
             summary = nil
             summaryURL = nil
             transcriptText = ""
-            meetingDate = nil
             return
         }
-        meetingDate = target.recordedAt
         let summarySource = target.summaryURL ?? target.legacyCombinedURL
         if let summarySource {
             summaryURL = summarySource
@@ -228,8 +224,8 @@ struct SummaryTabView: View {
         availableOllamaModels = models.map(\.name).sorted()
     }
 
-    private func regenerate(provider: LLMProvider, ollamaModelOverride: String?) async {
-        guard !transcriptText.isEmpty, let date = meetingDate else { return }
+    private func regenerate(provider: LLMProvider, ollamaModelOverride: String?, label: String) async {
+        guard !transcriptText.isEmpty else { return }
         isRegenerating = true
         defer { isRegenerating = false }
         lastError = nil
@@ -254,7 +250,7 @@ struct SummaryTabView: View {
         }
         do {
             let dir = AppSettings.shared.notesDirectory
-            let url = try MarkdownWriter.writeSummary(meetingDate: date, summary: newSummary, to: dir)
+            let url = try MarkdownWriter.writeSummary(meetingDate: meetingDate, summary: newSummary, to: dir)
             summaryURL = url
             summary = newSummary
         } catch {

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct MeetingsTabView: View {
-    @Bindable var viewModel: MainViewModel
+    @Environment(\.openWindow) private var openWindow
 
     @State private var meetings: [MeetingFile] = []
     @State private var searchQuery: String = ""
@@ -75,8 +75,7 @@ struct MeetingsTabView: View {
 
     private func meetingCard(_ meeting: MeetingFile) -> some View {
         Button {
-            viewModel.selectedMeetingID = meeting.id
-            viewModel.selectedTab = .summary
+            openWindow(value: meeting.recordedAt)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Circle()

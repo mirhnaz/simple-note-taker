@@ -2,7 +2,6 @@ import SwiftUI
 
 enum MainTab: String, CaseIterable, Identifiable {
     case recording
-    case summary
     case meetings
 
     var id: String { rawValue }
@@ -10,7 +9,6 @@ enum MainTab: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .recording: return "Recording"
-        case .summary: return "Summary"
         case .meetings: return "Meetings"
         }
     }
@@ -18,7 +16,6 @@ enum MainTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .recording: return "mic.fill"
-        case .summary: return "sparkles"
         case .meetings: return "calendar"
         }
     }
@@ -28,7 +25,6 @@ enum MainTab: String, CaseIterable, Identifiable {
 @Observable
 final class MainViewModel {
     var selectedTab: MainTab = .recording
-    var selectedMeetingID: MeetingFile.ID?
 }
 
 struct MainWindow: View {
@@ -78,10 +74,8 @@ struct MainWindow: View {
         switch viewModel.selectedTab {
         case .recording:
             RecordingTabView()
-        case .summary:
-            SummaryTabView(meetingID: viewModel.selectedMeetingID)
         case .meetings:
-            MeetingsTabView(viewModel: viewModel)
+            MeetingsTabView()
         }
     }
 
