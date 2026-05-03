@@ -14,6 +14,11 @@ struct MeetingDetailView: View {
     @State private var isRegenerating = false
     @State private var availableOllamaModels: [String] = []
     @State private var lastError: String?
+    /// Snapshot of the summary file content from before the most recent
+    /// Regenerate. Cleared when the user undoes or when a different meeting
+    /// is loaded.
+    @State private var previousSummaryFileContent: String?
+    @State private var previousModelLabel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,6 +60,14 @@ struct MeetingDetailView: View {
                 .font(.title3.bold())
                 .foregroundStyle(.purple)
             Spacer()
+            if previousSummaryFileContent != nil {
+                Button {
+                    undoRegenerate()
+                } label: {
+                    Label("Undo regenerate", systemImage: "arrow.uturn.backward")
+                }
+                .help(previousModelLabel.map { "Restore the summary from before \($0)" } ?? "Restore the previous summary")
+            }
             Button {
                 copyMarkdown()
             } label: {
@@ -71,13 +84,13 @@ struct MeetingDetailView: View {
     private var regenerateMenu: some View {
         Menu {
             Button("Apple Foundation Models") {
-                Task { await regenerate(provider: .apple, ollamaModelOverride: nil, label: "Apple Foundation Models") }
+                Task { await regenerate(provider: .apple, ollamaModelOverride: nil, modelLabel: "Apple Foundation Models") }
             }
             if !availableOllamaModels.isEmpty {
                 Section("Ollama") {
                     ForEach(availableOllamaModels, id: \.self) { name in
                         Button(name) {
-                            Task { await regenerate(provider: .ollama, ollamaModelOverride: name, label: "Ollama: \(name)") }
+                            Task { await regenerate(provider: .ollama, ollamaModelOverride: name, modelLabel: "Ollama: \(name)") }
                         }
                     }
                 }
@@ -197,6 +210,10 @@ struct MeetingDetailView: View {
     private func loadMeeting() async {
         isLoading = true
         defer { isLoading = false }
+        // A different meeting just loaded; the prior undo backup no longer
+        // applies and would restore the wrong file.
+        previousSummaryFileContent = nil
+        previousModelLabel = nil
         let dir = AppSettings.shared.notesDirectory
         let meetings = (try? await MeetingLibrary.load(from: dir)) ?? []
         guard let target = meetings.first(where: { $0.recordedAt == meetingDate }) else {
@@ -225,7 +242,7 @@ struct MeetingDetailView: View {
         availableOllamaModels = models.map(\.name).sorted()
     }
 
-    private func regenerate(provider: LLMProvider, ollamaModelOverride: String?, label: String) async {
+    private func regenerate(provider: LLMProvider, ollamaModelOverride: String?, modelLabel: String) async {
         guard !transcriptText.isEmpty else { return }
         isRegenerating = true
         defer { isRegenerating = false }
@@ -250,12 +267,31 @@ struct MeetingDetailView: View {
             return
         }
         do {
+            // Snapshot the on-disk content from before this regenerate so the
+            // user can revert if they don't like the new output.
+            if let summaryURL,
+               let existing = try? String(contentsOf: summaryURL, encoding: .utf8) {
+                previousSummaryFileContent = existing
+                previousModelLabel = modelLabel
+            }
             let dir = AppSettings.shared.notesDirectory
             let url = try MarkdownWriter.writeSummary(meetingDate: meetingDate, summary: newSummary, to: dir)
             summaryURL = url
             summary = newSummary
         } catch {
             lastError = "Couldn't save regenerated summary: \(error.localizedDescription)"
+        }
+    }
+
+    private func undoRegenerate() {
+        guard let backup = previousSummaryFileContent, let summaryURL else { return }
+        do {
+            try backup.write(to: summaryURL, atomically: true, encoding: .utf8)
+            summary = MeetingSummaryParser.parse(content: backup)
+            previousSummaryFileContent = nil
+            previousModelLabel = nil
+        } catch {
+            lastError = "Couldn't restore the previous summary: \(error.localizedDescription)"
         }
     }
 
