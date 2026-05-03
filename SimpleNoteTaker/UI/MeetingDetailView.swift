@@ -37,6 +37,7 @@ struct MeetingDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle(navigationTitle)
+        .background(Color.appWindowBackground)
         .task(id: meetingDate) { await loadMeeting() }
         .task { await refreshOllamaModels() }
     }
@@ -150,7 +151,7 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(.background.secondary)
+                .fill(Color.appCardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)

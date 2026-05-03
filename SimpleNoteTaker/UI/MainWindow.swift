@@ -40,6 +40,7 @@ struct MainWindow: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 760, minHeight: 560)
+        .background(Color.appWindowBackground)
         .onAppear { AppActivation.shared.windowDidAppear() }
         .onDisappear { AppActivation.shared.windowDidDisappear() }
     }

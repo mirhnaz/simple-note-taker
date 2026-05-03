@@ -108,7 +108,7 @@ struct MeetingsTabView: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(.background.secondary)
+                    .fill(Color.appCardBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
