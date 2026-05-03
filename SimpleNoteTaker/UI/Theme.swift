@@ -2,27 +2,17 @@ import AppKit
 import SwiftUI
 
 extension Color {
-    /// Window background — cream/wheat in light mode (matches the meetily
-    /// look the user picked as inspiration), system default in dark mode.
+    /// App window background — uses the system `windowBackgroundColor` in
+    /// both light and dark modes so we match Apple HIG. Earlier this was a
+    /// custom cream tone but it stood out too much against other macOS apps.
     static var appWindowBackground: Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            if isDark {
-                return NSColor.windowBackgroundColor
-            }
-            return NSColor(srgbRed: 0.962, green: 0.933, blue: 0.871, alpha: 1.0)
-        }))
+        Color(nsColor: NSColor.windowBackgroundColor)
     }
 
-    /// Card background — sits on top of `appWindowBackground`. Slightly off-
-    /// white in light mode for separation, system secondary in dark mode.
+    /// Card background — sits on top of `appWindowBackground` with subtle
+    /// contrast. Uses `controlBackgroundColor` (white in light mode, dark
+    /// gray in dark mode) so cards read as raised surfaces by default.
     static var appCardBackground: Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            if isDark {
-                return NSColor.controlBackgroundColor
-            }
-            return NSColor(srgbRed: 0.992, green: 0.984, blue: 0.965, alpha: 1.0)
-        }))
+        Color(nsColor: NSColor.controlBackgroundColor)
     }
 }
