@@ -244,6 +244,7 @@ private var idlePlaceholder: some View {
         panel.allowedContentTypes = [.audio]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importLog.info("import selected: \(url.lastPathComponent, privacy: .public)")
+        Task { await controller.importRecording(from: url) }
     }
 
     private var displayTranscript: String {

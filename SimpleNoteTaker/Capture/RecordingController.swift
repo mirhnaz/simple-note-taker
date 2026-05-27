@@ -79,4 +79,18 @@ final class RecordingController {
         self.session = nil
         self.state = .idle
     }
+
+    func importRecording(from sourceURL: URL) async {
+        guard case .idle = state else { return }
+        self.state = .transcribing(startedAt: Date())
+        self.lastWarning = nil
+        do {
+            let url = try await ImportSession.run(sourceURL: sourceURL)
+            self.lastTranscriptURL = url
+            self.lastError = nil
+        } catch {
+            self.lastError = "Import failed: \(error.localizedDescription)"
+        }
+        self.state = .idle
+    }
 }
