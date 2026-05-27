@@ -1,5 +1,9 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+import os
+
+private let importLog = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "import")
 
 struct RecordingTabView: View {
     @Bindable private var controller = RecordingController.shared
@@ -39,6 +43,13 @@ struct RecordingTabView: View {
                 .font(.title3).bold()
             Spacer()
             recordingStatusPill
+            Button {
+                presentImportPanel()
+            } label: {
+                Label("Import Recording…", systemImage: "square.and.arrow.down")
+            }
+            .disabled(!isIdle)
+            .help("Import an audio file and transcribe it as a new meeting")
             Button {
                 copyTranscriptToPasteboard()
             } label: {
@@ -215,6 +226,25 @@ private var idlePlaceholder: some View {
     }
 
     // MARK: - Helpers
+
+    private var isIdle: Bool {
+        if case .idle = controller.state { return true }
+        return false
+    }
+
+    @MainActor
+    private func presentImportPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Recording"
+        panel.message = "Choose an audio file to transcribe as a new meeting."
+        panel.prompt = "Import"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.audio]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importLog.info("import selected: \(url.lastPathComponent, privacy: .public)")
+    }
 
     private var displayTranscript: String {
         if let session = controller.session as? RecordingSession {
