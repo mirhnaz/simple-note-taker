@@ -74,11 +74,26 @@ final class RecordingController {
             let url = try await session.stop()
             self.lastTranscriptURL = url
             self.lastError = nil
+            applyAppleIntelligenceWarningIfNeeded()
         } catch {
             self.lastError = "Transcription failed: \(error.localizedDescription)"
         }
         self.session = nil
         self.state = .idle
+    }
+
+    /// When the user has Apple Foundation Models selected but the on-device
+    /// model is unavailable, the meeting saves without a summary. Surface the
+    /// reason so the user knows to enable Apple Intelligence (or wait for
+    /// the download) and re-run Regenerate.
+    private func applyAppleIntelligenceWarningIfNeeded() {
+        guard AppSettings.shared.llmProvider == .apple,
+              let message = FoundationModelsAvailability.currentMessage() else { return }
+        if self.lastWarning == nil {
+            self.lastWarning = message
+        } else if let existing = self.lastWarning, !existing.contains("Apple Intelligence") {
+            self.lastWarning = existing + "\n" + message
+        }
     }
 
     func importRecording(from sourceURL: URL, meetingDate: Date) async {
@@ -95,6 +110,7 @@ final class RecordingController {
             }
             self.lastTranscriptURL = url
             self.lastError = nil
+            applyAppleIntelligenceWarningIfNeeded()
         } catch {
             self.lastError = "Import failed: \(error.localizedDescription)"
         }

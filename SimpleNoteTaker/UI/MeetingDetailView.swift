@@ -262,6 +262,10 @@ struct MeetingDetailView: View {
         let summarizer: any Summarizing
         switch provider {
         case .apple:
+            if let message = FoundationModelsAvailability.currentMessage() {
+                lastError = message
+                return
+            }
             summarizer = FoundationModelsSummarizer()
         case .ollama:
             let modelName = ollamaModelOverride ?? AppSettings.shared.ollamaModel
