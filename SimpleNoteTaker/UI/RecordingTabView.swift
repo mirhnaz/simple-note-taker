@@ -75,7 +75,8 @@ struct RecordingTabView: View {
         case .transcribing:
             HStack(spacing: 5) {
                 ProgressView().controlSize(.mini)
-                Text("Processing").font(.caption).foregroundStyle(.secondary)
+                Text(controller.importPhase?.label ?? "Processing")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         case .starting:
             HStack(spacing: 5) {
@@ -216,7 +217,8 @@ private var idlePlaceholder: some View {
                 }
             case .transcribing:
                 ProgressView().controlSize(.small)
-                Text("Transcribing & summarizing…").foregroundStyle(.secondary)
+                Text(controller.importPhase?.label ?? "Transcribing & summarizing…")
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 20)

@@ -3,6 +3,20 @@ import os
 
 private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "import")
 
+enum ImportPhase: Equatable, Sendable {
+    case transcribing
+    case summarizing
+    case writing
+
+    var label: String {
+        switch self {
+        case .transcribing: return "Transcribing audio…"
+        case .summarizing: return "Summarizing…"
+        case .writing: return "Saving meeting…"
+        }
+    }
+}
+
 /// Transcribes a pre-existing audio file and writes it as a new meeting.
 /// Reuses the same FileTranscriber + Summarizer + MarkdownWriter pipeline as
 /// `RecordingSession.stop()`, minus the live capture phase.
@@ -14,7 +28,8 @@ enum ImportSession {
         sourceURL: URL,
         settings: AppSettings = .shared,
         summarizer: (any Summarizing)? = nil,
-        fileTranscriber: (any FileTranscribing)? = nil
+        fileTranscriber: (any FileTranscribing)? = nil,
+        onPhase: @MainActor @Sendable (ImportPhase) async -> Void = { _ in }
     ) async throws -> URL {
         let summarizer = summarizer ?? settings.makeSummarizer()
         let fileTranscriber = fileTranscriber ?? settings.makeFileTranscriber()
@@ -23,12 +38,15 @@ enum ImportSession {
         let meetingDate = meetingDate(for: sourceURL)
         log.info("import starting: \(sourceURL.lastPathComponent, privacy: .public), date \(meetingDate, privacy: .public)")
 
+        await onPhase(.transcribing)
         let segments = try await transcribe(sourceURL: sourceURL, transcriber: fileTranscriber)
         log.info("import segments: \(segments.count, privacy: .public)")
 
+        await onPhase(.summarizing)
         let summary = await summarize(segments: segments, summarizer: summarizer)
         log.info("import summary: \(summary == nil ? "(none)" : "ok", privacy: .public)")
 
+        await onPhase(.writing)
         let written = try MarkdownWriter.write(
             meetingDate: meetingDate,
             segments: segments,

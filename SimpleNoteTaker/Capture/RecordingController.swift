@@ -19,6 +19,7 @@ final class RecordingController {
     private(set) var lastWarning: String?
     private(set) var lastTranscriptURL: URL?
     private(set) var session: AudioRecorder?
+    private(set) var importPhase: ImportPhase?
     private let startSession: () async throws -> AudioRecorder
     private let requestPermissions: () async -> Permissions.Status
 
@@ -84,13 +85,17 @@ final class RecordingController {
         guard case .idle = state else { return }
         self.state = .transcribing(startedAt: Date())
         self.lastWarning = nil
+        self.importPhase = .transcribing
         do {
-            let url = try await ImportSession.run(sourceURL: sourceURL)
+            let url = try await ImportSession.run(sourceURL: sourceURL) { phase in
+                self.importPhase = phase
+            }
             self.lastTranscriptURL = url
             self.lastError = nil
         } catch {
             self.lastError = "Import failed: \(error.localizedDescription)"
         }
+        self.importPhase = nil
         self.state = .idle
     }
 }
