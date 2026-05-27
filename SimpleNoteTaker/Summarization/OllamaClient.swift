@@ -81,6 +81,48 @@ struct OllamaClient: Sendable {
         return content
     }
 
+    /// Pulls a model via /api/pull and streams the progress lines. `onStatus`
+    /// fires for each NDJSON status update; it runs on the main actor so the
+    /// caller can drive a SwiftUI label without bouncing through Task hops.
+    func pullModel(
+        _ name: String,
+        onStatus: @escaping @MainActor @Sendable (String) async -> Void
+    ) async throws {
+        let url = baseURL.appending(path: "/api/pull")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw OllamaClientError.badResponse(status: status, body: "pull failed before stream began")
+        }
+        for try await line in bytes.lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  let data = trimmed.data(using: .utf8),
+                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let err = dict["error"] as? String {
+                throw OllamaClientError.badResponse(status: 0, body: err)
+            }
+            let status = (dict["status"] as? String) ?? ""
+            let message: String
+            if let completed = dict["completed"] as? Int,
+               let total = dict["total"] as? Int,
+               total > 0 {
+                let totalMB = total / 1_000_000
+                let doneMB = completed / 1_000_000
+                message = "\(status) — \(doneMB) / \(totalMB) MB"
+            } else {
+                message = status
+            }
+            if !message.isEmpty {
+                await onStatus(message)
+            }
+        }
+    }
+
     private static func checkOK(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
         if !(200..<300).contains(http.statusCode) {

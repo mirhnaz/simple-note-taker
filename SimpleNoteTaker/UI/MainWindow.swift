@@ -29,9 +29,12 @@ final class MainViewModel {
 
 struct MainWindow: View {
     @Bindable private var viewModel = MainViewModel()
+    @Bindable private var controller = RecordingController.shared
+    @State private var showingSetupSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
+            setupBanner
             tabBar
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -43,6 +46,39 @@ struct MainWindow: View {
         .background(Color.appWindowBackground)
         .onAppear { AppActivation.shared.windowDidAppear() }
         .onDisappear { AppActivation.shared.windowDidDisappear() }
+        .sheet(
+            isPresented: $showingSetupSheet,
+            onDismiss: {
+                Task { await controller.refreshSummarizerStatus() }
+            }
+        ) {
+            SummarizerSetupSheet()
+        }
+    }
+
+    @ViewBuilder
+    private var setupBanner: some View {
+        if let message = controller.summarizerStatus.unavailableMessage {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Summarization isn't ready").font(.callout).bold()
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button("Set up") { showingSetupSheet = true }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.orange.opacity(0.10))
+            Divider()
+        }
     }
 
     private var tabBar: some View {
