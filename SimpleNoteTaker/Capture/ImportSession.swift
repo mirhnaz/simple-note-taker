@@ -69,8 +69,26 @@ enum ImportSession {
         sourceURL: URL,
         transcriber: any FileTranscribing
     ) async throws -> [TranscriptSegment] {
-        try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
-            try await transcriber.transcribe(audioFile: sourceURL, kind: .mic)
+        do {
+            return try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
+                try await transcriber.transcribe(audioFile: sourceURL, kind: .mic)
+            }
+        } catch {
+            // Some transcribers (notably Apple SpeechAnalyzer / AVAudioFile)
+            // reject formats they can't decode. Transcode to AAC/.m4a and
+            // retry once before giving up.
+            log.warning("initial transcription failed (\(error.localizedDescription, privacy: .public)); retrying after transcode")
+            let originalError = error
+            do {
+                let transcoded = try await AudioNormalization.transcodeToM4A(source: sourceURL)
+                defer { try? FileManager.default.removeItem(at: transcoded) }
+                return try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
+                    try await transcriber.transcribe(audioFile: transcoded, kind: .mic)
+                }
+            } catch {
+                log.error("retry after transcode also failed: \(error.localizedDescription, privacy: .public)")
+                throw originalError
+            }
         }
     }
 
