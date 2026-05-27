@@ -3,6 +3,7 @@ import Foundation
 enum MeetingFileKind: Sendable {
     case summary
     case transcript
+    case reading
     case legacyCombined
 }
 
@@ -17,13 +18,14 @@ enum MeetingLibrary {
         let urls = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         let mdURLs = urls.filter { $0.pathExtension.lowercased() == "md" && $0.lastPathComponent.hasPrefix("meeting-") }
 
-        var byDate: [Date: (summary: URL?, transcript: URL?, legacy: URL?)] = [:]
+        var byDate: [Date: (summary: URL?, transcript: URL?, reading: URL?, legacy: URL?)] = [:]
         for url in mdURLs {
             guard let parsed = parseMeetingFilename(url.lastPathComponent) else { continue }
-            var entry = byDate[parsed.date] ?? (nil, nil, nil)
+            var entry = byDate[parsed.date] ?? (nil, nil, nil, nil)
             switch parsed.kind {
             case .summary: entry.summary = url
             case .transcript: entry.transcript = url
+            case .reading: entry.reading = url
             case .legacyCombined: entry.legacy = url
             }
             byDate[parsed.date] = entry
@@ -42,6 +44,7 @@ enum MeetingLibrary {
             return MeetingFile(
                 summaryURL: urls.summary,
                 transcriptURL: urls.transcript,
+                readingURL: urls.reading,
                 legacyCombinedURL: urls.legacy,
                 title: title,
                 recordedAt: date,
@@ -68,6 +71,10 @@ enum MeetingLibrary {
         if body.hasSuffix("-transcript"),
            let date = dateParser.date(from: String(body.dropLast("-transcript".count))) {
             return (date, .transcript)
+        }
+        if body.hasSuffix("-reading"),
+           let date = dateParser.date(from: String(body.dropLast("-reading".count))) {
+            return (date, .reading)
         }
         if let date = dateParser.date(from: body) {
             return (date, .legacyCombined)

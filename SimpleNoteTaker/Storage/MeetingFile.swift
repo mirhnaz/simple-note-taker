@@ -4,6 +4,9 @@ struct MeetingFile: Identifiable, Hashable, Sendable {
     /// Modern split layout: post-M11.0 meetings have both files.
     let summaryURL: URL?
     let transcriptURL: URL?
+    /// Clean prose version (no timestamps, no speaker tags) for end-to-end
+    /// reading and full-text search. Added in M14.2.
+    let readingURL: URL?
     /// Legacy combined file: pre-M11.0 single `meeting-<ts>.md`. When present,
     /// the meeting is treated as summary-only (no separate transcript pane).
     let legacyCombinedURL: URL?

@@ -10,6 +10,7 @@ struct MeetingDetailView: View {
     @State private var summary: MeetingSummary?
     @State private var transcriptText: String = ""
     @State private var summaryURL: URL?
+    @State private var readingURL: URL?
     @State private var isLoading = false
     @State private var isRegenerating = false
     @State private var availableOllamaModels: [String] = []
@@ -68,6 +69,14 @@ struct MeetingDetailView: View {
                 }
                 .help(previousModelLabel.map { "Restore the summary from before \($0)" } ?? "Restore the previous summary")
             }
+            Button {
+                openReadingFile()
+            } label: {
+                Label("Open Reading File", systemImage: "doc.text")
+            }
+            .disabled(readingURL == nil)
+            .help("Open the clean prose version of this meeting (no timestamps) for reading and search")
+
             Button {
                 copyMarkdown()
             } label: {
@@ -219,6 +228,7 @@ struct MeetingDetailView: View {
         guard let target = meetings.first(where: { $0.recordedAt == meetingDate }) else {
             summary = nil
             summaryURL = nil
+            readingURL = nil
             transcriptText = ""
             return
         }
@@ -228,6 +238,7 @@ struct MeetingDetailView: View {
             let content = (try? String(contentsOf: summarySource, encoding: .utf8)) ?? ""
             summary = MeetingSummaryParser.parse(content: content)
         }
+        readingURL = target.readingURL
         let transcriptSource = target.transcriptURL ?? target.legacyCombinedURL
         if let transcriptSource {
             transcriptText = (try? String(contentsOf: transcriptSource, encoding: .utf8)) ?? ""
@@ -301,5 +312,10 @@ struct MeetingDetailView: View {
         guard !content.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content, forType: .string)
+    }
+
+    private func openReadingFile() {
+        guard let url = readingURL else { return }
+        NSWorkspace.shared.open(url)
     }
 }

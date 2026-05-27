@@ -3,6 +3,7 @@ import Foundation
 struct WrittenMeeting {
     let summaryURL: URL
     let transcriptURL: URL
+    let readingURL: URL
 }
 
 enum MarkdownWriter {
@@ -47,6 +48,69 @@ enum MarkdownWriter {
         """ + "\n"
     }
 
+    /// Renders a clean reading-friendly version: no timestamps, no speaker
+    /// tags. Adjacent segments of the same source with small gaps are
+    /// joined into one paragraph; speaker changes or pauses >3s start a
+    /// new paragraph. Useful when the AI summary isn't enough and you want
+    /// to skim/search the whole meeting as prose.
+    static func renderReading(
+        meetingDate: Date,
+        segments: [TranscriptSegment],
+        summary: MeetingSummary? = nil,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let dateLabel = Self.formatDateLabel(meetingDate, timeZone: timeZone)
+        let titleText = (summary?.title).flatMap { $0.isEmpty ? nil : $0 } ?? dateLabel
+
+        guard !segments.isEmpty else {
+            return """
+            # Meeting — \(titleText)
+            _Recorded \(dateLabel)_
+
+            _(no speech detected)_
+            """ + "\n"
+        }
+
+        let body = renderReadingBody(segments: segments)
+        return """
+        # Meeting — \(titleText)
+        _Recorded \(dateLabel)_
+
+        \(body)
+        """ + "\n"
+    }
+
+    private static let readingParagraphBreakSeconds: TimeInterval = 3.0
+
+    private static func renderReadingBody(segments: [TranscriptSegment]) -> String {
+        let ordered = TranscriptMerger.interleave(segments)
+        var paragraphs: [String] = []
+        var current: [String] = []
+        var lastEnd: TimeInterval?
+        var lastKind: AudioKind?
+
+        for segment in ordered {
+            let text = segment.text.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            let shouldBreak: Bool = {
+                guard let lastKind, let lastEnd else { return false }
+                if lastKind != segment.kind { return true }
+                return segment.startSeconds - lastEnd > readingParagraphBreakSeconds
+            }()
+            if shouldBreak && !current.isEmpty {
+                paragraphs.append(current.joined(separator: " "))
+                current.removeAll(keepingCapacity: true)
+            }
+            current.append(text)
+            lastEnd = max(segment.endSeconds, lastEnd ?? 0)
+            lastKind = segment.kind
+        }
+        if !current.isEmpty {
+            paragraphs.append(current.joined(separator: " "))
+        }
+        return paragraphs.joined(separator: "\n\n")
+    }
+
     /// Writes JUST the summary file. Used by Regenerate so we don't
     /// clobber the transcript with an empty segments array.
     @discardableResult
@@ -62,8 +126,10 @@ enum MarkdownWriter {
         return url
     }
 
-    /// Writes both the summary and transcript files. Returns both URLs;
-    /// `summaryURL` is the canonical "meeting" file users open by default.
+    /// Writes the summary, transcript, and reading files. Returns all three
+    /// URLs; `summaryURL` is the canonical "meeting" file users open by
+    /// default. The reading file is a clean prose version of the transcript
+    /// without timestamps, for end-to-end reading and search.
     @discardableResult
     static func write(
         meetingDate: Date,
@@ -74,14 +140,21 @@ enum MarkdownWriter {
         try Paths.ensureDirectoryExists(directory)
         let summaryURL = directory.appending(path: MeetingFiles.summaryFilename(for: meetingDate))
         let transcriptURL = directory.appending(path: MeetingFiles.transcriptFilename(for: meetingDate))
+        let readingURL = directory.appending(path: MeetingFiles.readingFilename(for: meetingDate))
 
         let summaryContent = renderSummary(meetingDate: meetingDate, summary: summary)
         let transcriptContent = renderTranscript(meetingDate: meetingDate, segments: segments)
+        let readingContent = renderReading(meetingDate: meetingDate, segments: segments, summary: summary)
 
         try summaryContent.write(to: summaryURL, atomically: true, encoding: .utf8)
         try transcriptContent.write(to: transcriptURL, atomically: true, encoding: .utf8)
+        try readingContent.write(to: readingURL, atomically: true, encoding: .utf8)
 
-        return WrittenMeeting(summaryURL: summaryURL, transcriptURL: transcriptURL)
+        return WrittenMeeting(
+            summaryURL: summaryURL,
+            transcriptURL: transcriptURL,
+            readingURL: readingURL
+        )
     }
 
     private static func formatDateLabel(_ date: Date, timeZone: TimeZone) -> String {
