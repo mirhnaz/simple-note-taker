@@ -8,6 +8,7 @@ private let importLog = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "
 struct RecordingTabView: View {
     @Bindable private var controller = RecordingController.shared
     @State private var lastTranscript: String = ""
+    @State private var pendingImport: PendingImport?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -23,6 +24,18 @@ struct RecordingTabView: View {
             if case .idle = controller.state {
                 await loadLastTranscript()
             }
+        }
+        .sheet(item: $pendingImport) { item in
+            ImportConfirmationSheet(
+                fileName: item.url.lastPathComponent,
+                initialDate: item.meetingDate,
+                onCancel: { pendingImport = nil },
+                onImport: { confirmedDate in
+                    let url = item.url
+                    pendingImport = nil
+                    Task { await controller.importRecording(from: url, meetingDate: confirmedDate) }
+                }
+            )
         }
     }
 
@@ -239,14 +252,17 @@ private var idlePlaceholder: some View {
         let panel = NSOpenPanel()
         panel.title = "Import Recording"
         panel.message = "Choose an audio file to transcribe as a new meeting."
-        panel.prompt = "Import"
+        panel.prompt = "Choose"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.audio]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importLog.info("import selected: \(url.lastPathComponent, privacy: .public)")
-        Task { await controller.importRecording(from: url) }
+        pendingImport = PendingImport(
+            url: url,
+            meetingDate: ImportSession.defaultMeetingDate(for: url)
+        )
     }
 
     private var displayTranscript: String {
@@ -283,5 +299,66 @@ private var idlePlaceholder: some View {
         }
         let url = latest.transcriptURL ?? latest.legacyCombinedURL ?? latest.primaryURL
         lastTranscript = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+}
+
+private struct PendingImport: Identifiable {
+    let id = UUID()
+    let url: URL
+    let meetingDate: Date
+}
+
+private struct ImportConfirmationSheet: View {
+    let fileName: String
+    let initialDate: Date
+    let onCancel: () -> Void
+    let onImport: (Date) -> Void
+
+    @State private var meetingDate: Date
+
+    init(
+        fileName: String,
+        initialDate: Date,
+        onCancel: @escaping () -> Void,
+        onImport: @escaping (Date) -> Void
+    ) {
+        self.fileName = fileName
+        self.initialDate = initialDate
+        self.onCancel = onCancel
+        self.onImport = onImport
+        self._meetingDate = State(initialValue: initialDate)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Import Recording").font(.title3).bold()
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .foregroundStyle(.secondary)
+                Text(fileName)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            DatePicker(
+                "Meeting date",
+                selection: $meetingDate,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            Text("Defaults to the file's modification date. Adjust if the meeting happened at a different time.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Import") { onImport(meetingDate) }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
     }
 }

@@ -81,13 +81,16 @@ final class RecordingController {
         self.state = .idle
     }
 
-    func importRecording(from sourceURL: URL) async {
+    func importRecording(from sourceURL: URL, meetingDate: Date) async {
         guard case .idle = state else { return }
         self.state = .transcribing(startedAt: Date())
         self.lastWarning = nil
         self.importPhase = .transcribing
         do {
-            let url = try await ImportSession.run(sourceURL: sourceURL) { phase in
+            let url = try await ImportSession.run(
+                sourceURL: sourceURL,
+                meetingDate: meetingDate
+            ) { phase in
                 self.importPhase = phase
             }
             self.lastTranscriptURL = url

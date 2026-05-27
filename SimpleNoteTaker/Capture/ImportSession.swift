@@ -26,6 +26,7 @@ enum ImportSession {
 
     static func run(
         sourceURL: URL,
+        meetingDate: Date? = nil,
         settings: AppSettings = .shared,
         summarizer: (any Summarizing)? = nil,
         fileTranscriber: (any FileTranscribing)? = nil,
@@ -35,8 +36,8 @@ enum ImportSession {
         let fileTranscriber = fileTranscriber ?? settings.makeFileTranscriber()
         try Paths.ensureDirectoryExists(settings.notesDirectory)
 
-        let meetingDate = meetingDate(for: sourceURL)
-        log.info("import starting: \(sourceURL.lastPathComponent, privacy: .public), date \(meetingDate, privacy: .public)")
+        let resolvedDate = meetingDate ?? defaultMeetingDate(for: sourceURL)
+        log.info("import starting: \(sourceURL.lastPathComponent, privacy: .public), date \(resolvedDate, privacy: .public)")
 
         await onPhase(.transcribing)
         let segments = try await transcribe(sourceURL: sourceURL, transcriber: fileTranscriber)
@@ -48,7 +49,7 @@ enum ImportSession {
 
         await onPhase(.writing)
         let written = try MarkdownWriter.write(
-            meetingDate: meetingDate,
+            meetingDate: resolvedDate,
             segments: segments,
             summary: summary,
             to: settings.notesDirectory
@@ -57,10 +58,9 @@ enum ImportSession {
         return written.summaryURL
     }
 
-    /// Stamp the new meeting with the source file's modification date so
-    /// imported recordings show up in the meetings list under the date they
-    /// were actually recorded, not under "now".
-    private static func meetingDate(for url: URL) -> Date {
+    /// Default stamp when the caller doesn't override: the source file's
+    /// modification date, falling back to "now" if unreadable.
+    static func defaultMeetingDate(for url: URL) -> Date {
         let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
         return (attrs?[.modificationDate] as? Date) ?? Date()
     }
