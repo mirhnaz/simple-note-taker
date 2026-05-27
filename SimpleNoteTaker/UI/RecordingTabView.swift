@@ -25,6 +25,7 @@ struct RecordingTabView: View {
                 await loadLastTranscript()
             }
         }
+        .task { await controller.refreshSummarizerStatus() }
         .sheet(item: $pendingImport) { item in
             ImportConfirmationSheet(
                 fileName: item.url.lastPathComponent,
@@ -61,8 +62,8 @@ struct RecordingTabView: View {
             } label: {
                 Label("Import Recording…", systemImage: "square.and.arrow.down")
             }
-            .disabled(!isIdle)
-            .help("Import an audio file and transcribe it as a new meeting")
+            .disabled(!isIdle || !controller.summarizerStatus.isReady)
+            .help(controller.summarizerStatus.unavailableMessage ?? "Import an audio file and transcribe it as a new meeting")
             Button {
                 copyTranscriptToPasteboard()
             } label: {
@@ -169,9 +170,24 @@ private var idlePlaceholder: some View {
             Image(systemName: "mic.circle")
                 .font(.system(size: 56))
                 .foregroundStyle(.tertiary)
-            Text("Press Record to start a meeting")
+            Text(controller.summarizerStatus.isReady
+                ? "Press Record to start a meeting"
+                : "Summarization isn't ready yet")
                 .font(.title3)
                 .foregroundStyle(.secondary)
+            if let blocker = controller.summarizerStatus.unavailableMessage {
+                VStack(spacing: 8) {
+                    Text(blocker)
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    Button("Retry") {
+                        Task { await controller.refreshSummarizerStatus() }
+                    }
+                    .controlSize(.small)
+                }
+            }
             if let warning = controller.lastWarning {
                 Text(warning)
                     .font(.caption)
@@ -202,12 +218,15 @@ private var idlePlaceholder: some View {
                     Task { await controller.start() }
                 } label: {
                     ZStack {
-                        Circle().fill(.red).frame(width: 36, height: 36)
+                        Circle()
+                            .fill(controller.summarizerStatus.isReady ? .red : Color.gray.opacity(0.6))
+                            .frame(width: 36, height: 36)
                         Image(systemName: "mic.fill").foregroundStyle(.white)
                     }
                 }
                 .buttonStyle(.plain)
-                .help("Start recording")
+                .disabled(!controller.summarizerStatus.isReady)
+                .help(controller.summarizerStatus.unavailableMessage ?? "Start recording")
                 Text("Record").font(.body).foregroundStyle(.primary)
             case .starting:
                 ProgressView().controlSize(.small)

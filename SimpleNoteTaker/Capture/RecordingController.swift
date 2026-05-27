@@ -9,6 +9,22 @@ enum RecordingState: Equatable {
     case transcribing(startedAt: Date)
 }
 
+enum SummarizerStatus: Equatable, Sendable {
+    case checking
+    case ready
+    case unavailable(String)
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+
+    var unavailableMessage: String? {
+        if case .unavailable(let msg) = self { return msg }
+        return nil
+    }
+}
+
 @MainActor
 @Observable
 final class RecordingController {
@@ -20,6 +36,7 @@ final class RecordingController {
     private(set) var lastTranscriptURL: URL?
     private(set) var session: AudioRecorder?
     private(set) var importPhase: ImportPhase?
+    private(set) var summarizerStatus: SummarizerStatus = .checking
     private let startSession: () async throws -> AudioRecorder
     private let requestPermissions: () async -> Permissions.Status
 
@@ -31,7 +48,44 @@ final class RecordingController {
         self.requestPermissions = requestPermissions
     }
 
+    /// Re-checks whether a usable summarizer is reachable. Apple Foundation
+    /// Models needs Apple Intelligence enabled and the on-device model
+    /// downloaded; Ollama needs the server running and the configured model
+    /// pulled. Drives whether Record + Import are usable in the UI.
+    func refreshSummarizerStatus() async {
+        let settings = AppSettings.shared
+        switch settings.llmProvider {
+        case .apple:
+            if let message = FoundationModelsAvailability.currentMessage() {
+                summarizerStatus = .unavailable(message)
+            } else {
+                summarizerStatus = .ready
+            }
+        case .ollama:
+            let modelName = settings.ollamaModel.trimmingCharacters(in: .whitespaces)
+            guard !modelName.isEmpty else {
+                summarizerStatus = .unavailable("No Ollama model selected. Open Settings and pick one.")
+                return
+            }
+            let baseURL = settings.ollamaBaseURL
+            do {
+                let models = try await OllamaClient(baseURL: baseURL).listModels()
+                if models.contains(where: { $0.name == modelName }) {
+                    summarizerStatus = .ready
+                } else {
+                    summarizerStatus = .unavailable("Ollama model '\(modelName)' isn't pulled yet. Run `ollama pull \(modelName)` in a terminal, then click Retry.")
+                }
+            } catch {
+                summarizerStatus = .unavailable("Can't reach Ollama at \(baseURL.absoluteString). Start Ollama and click Retry, or switch to Apple Foundation Models in Settings.")
+            }
+        }
+    }
+
     func start() async {
+        guard summarizerStatus.isReady else {
+            lastError = summarizerStatus.unavailableMessage ?? "Summarization isn't set up. Open Settings to configure a provider."
+            return
+        }
         let permissions = await requestPermissions()
         guard permissions.microphone else {
             lastError = "Microphone access denied. Enable it in System Settings → Privacy & Security → Microphone."
@@ -98,6 +152,10 @@ final class RecordingController {
 
     func importRecording(from sourceURL: URL, meetingDate: Date) async {
         guard case .idle = state else { return }
+        guard summarizerStatus.isReady else {
+            lastError = summarizerStatus.unavailableMessage ?? "Summarization isn't set up. Open Settings to configure a provider."
+            return
+        }
         self.state = .transcribing(startedAt: Date())
         self.lastWarning = nil
         self.importPhase = .transcribing
