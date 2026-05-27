@@ -40,7 +40,11 @@ enum ImportSession {
         log.info("import starting: \(sourceURL.lastPathComponent, privacy: .public), date \(resolvedDate, privacy: .public)")
 
         await onPhase(.transcribing)
-        let segments = try await transcribe(sourceURL: sourceURL, transcriber: fileTranscriber)
+        let (segments, scratchFiles) = try await prepareAndTranscribe(
+            sourceURL: sourceURL,
+            transcriber: fileTranscriber
+        )
+        defer { scratchFiles.forEach { try? FileManager.default.removeItem(at: $0) } }
         log.info("import segments: \(segments.count, privacy: .public)")
 
         await onPhase(.summarizing)
@@ -65,30 +69,43 @@ enum ImportSession {
         return (attrs?[.modificationDate] as? Date) ?? Date()
     }
 
-    private static func transcribe(
+    /// Returns segments plus any temp files the caller must clean up.
+    private static func prepareAndTranscribe(
         sourceURL: URL,
         transcriber: any FileTranscribing
-    ) async throws -> [TranscriptSegment] {
+    ) async throws -> ([TranscriptSegment], [URL]) {
+        // Video containers (mp4, mov, …) can never be fed to AVAudioFile and
+        // are flaky through AVAssetExportSession, so always pre-extract via
+        // ffmpeg before the transcriber sees them.
+        if AudioNormalization.isVideoFile(sourceURL) {
+            let normalized = try await AudioNormalization.normalize(source: sourceURL)
+            let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized)
+            return (segments, [normalized])
+        }
+
         do {
-            return try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
-                try await transcriber.transcribe(audioFile: sourceURL, kind: .mic)
-            }
+            let segments = try await runTranscriber(transcriber: transcriber, audioURL: sourceURL)
+            return (segments, [])
         } catch {
-            // Some transcribers (notably Apple SpeechAnalyzer / AVAudioFile)
-            // reject formats they can't decode. Transcode to AAC/.m4a and
-            // retry once before giving up.
-            log.warning("initial transcription failed (\(error.localizedDescription, privacy: .public)); retrying after transcode")
+            log.warning("initial transcription failed (\(error.localizedDescription, privacy: .public)); retrying after normalize")
             let originalError = error
             do {
-                let transcoded = try await AudioNormalization.transcodeToM4A(source: sourceURL)
-                defer { try? FileManager.default.removeItem(at: transcoded) }
-                return try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
-                    try await transcriber.transcribe(audioFile: transcoded, kind: .mic)
-                }
+                let normalized = try await AudioNormalization.normalize(source: sourceURL)
+                let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized)
+                return (segments, [normalized])
             } catch {
-                log.error("retry after transcode also failed: \(error.localizedDescription, privacy: .public)")
+                log.error("retry after normalize also failed: \(error.localizedDescription, privacy: .public)")
                 throw originalError
             }
+        }
+    }
+
+    private static func runTranscriber(
+        transcriber: any FileTranscribing,
+        audioURL: URL
+    ) async throws -> [TranscriptSegment] {
+        try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
+            try await transcriber.transcribe(audioFile: audioURL, kind: .mic)
         }
     }
 

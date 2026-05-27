@@ -251,12 +251,12 @@ private var idlePlaceholder: some View {
     private func presentImportPanel() {
         let panel = NSOpenPanel()
         panel.title = "Import Recording"
-        panel.message = "Choose an audio file to transcribe as a new meeting."
+        panel.message = "Choose an audio or video file to transcribe as a new meeting."
         panel.prompt = "Choose"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [.audio]
+        panel.allowedContentTypes = [.audio, .movie]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importLog.info("import selected: \(url.lastPathComponent, privacy: .public)")
         pendingImport = PendingImport(

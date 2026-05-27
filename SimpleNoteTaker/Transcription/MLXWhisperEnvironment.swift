@@ -57,10 +57,19 @@ enum MLXWhisperEnvironment {
     /// True if `ffmpeg` is reachable via the augmented PATH. mlx_whisper hard-
     /// requires ffmpeg internally, so we surface this independently in Settings.
     static func isFFmpegInstalled() -> Bool {
+        detectFFmpeg() != nil
+    }
+
+    /// Resolves the path to the system `ffmpeg` binary, or nil if not found.
+    /// Used by ImportSession to extract / normalize audio for transcription.
+    static func detectFFmpeg() -> URL? {
         for dir in candidateBinDirs {
-            if FileManager.default.isExecutableFile(atPath: "\(dir)/ffmpeg") { return true }
+            let candidate = "\(dir)/ffmpeg"
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return URL(filePath: candidate)
+            }
         }
-        return false
+        return whichOnPath("ffmpeg")
     }
 
     /// True if Hugging Face has the model snapshot directory locally.
