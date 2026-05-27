@@ -65,25 +65,31 @@ struct MainWindow: View {
     @ViewBuilder
     private var setupBanner: some View {
         if let message = controller.summarizerStatus.unavailableMessage {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "sparkles")
-                    .font(.title3)
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Summarization isn't ready").font(.callout).bold()
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.title3)
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Summarization isn't ready")
+                            .font(.callout)
+                            .bold()
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Set up") { showingSetupSheet = true }
+                        .buttonStyle(.borderedProminent)
                 }
-                Spacer()
-                Button("Set up") { showingSetupSheet = true }
-                    .buttonStyle(.borderedProminent)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                Divider()
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
             .background(Color.orange.opacity(0.10))
-            Divider()
+            .transaction { $0.animation = nil }
         }
     }
 
