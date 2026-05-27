@@ -382,7 +382,6 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records your microphone during meetings to transcribe locally on-device.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Transcribes your meetings on-device using Apple Speech.";
@@ -432,7 +431,6 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Records your microphone during meetings to transcribe locally on-device.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Transcribes your meetings on-device using Apple Speech.";
