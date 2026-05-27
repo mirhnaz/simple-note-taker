@@ -1,4 +1,7 @@
 import SwiftUI
+import os
+
+private let startupLog = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "startup")
 
 enum MainTab: String, CaseIterable, Identifiable {
     case recording
@@ -44,7 +47,10 @@ struct MainWindow: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .background(Color.appWindowBackground)
-        .onAppear { AppActivation.shared.windowDidAppear() }
+        .onAppear {
+            startupLog.info("main window onAppear")
+            AppActivation.shared.windowDidAppear()
+        }
         .onDisappear { AppActivation.shared.windowDidDisappear() }
         .sheet(
             isPresented: $showingSetupSheet,

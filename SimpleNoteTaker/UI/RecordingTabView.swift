@@ -7,7 +7,6 @@ private let importLog = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "
 
 struct RecordingTabView: View {
     @Bindable private var controller = RecordingController.shared
-    @State private var lastTranscript: String = ""
     @State private var pendingImport: PendingImport?
 
     var body: some View {
@@ -19,11 +18,6 @@ struct RecordingTabView: View {
             }
             recordingControl
                 .padding(.bottom, 24)
-        }
-        .task(id: controllerStateKey) {
-            if case .idle = controller.state {
-                await loadLastTranscript()
-            }
         }
         .task { await controller.refreshSummarizerStatus() }
         .sheet(item: $pendingImport) { item in
@@ -37,15 +31,6 @@ struct RecordingTabView: View {
                     Task { await controller.importRecording(from: url, meetingDate: confirmedDate) }
                 }
             )
-        }
-    }
-
-    private var controllerStateKey: String {
-        switch controller.state {
-        case .idle: return "idle"
-        case .starting: return "starting"
-        case .recording: return "recording"
-        case .transcribing: return "transcribing"
         }
     }
 
@@ -109,12 +94,6 @@ struct RecordingTabView: View {
         ScrollView {
             if let session = controller.session as? RecordingSession {
                 liveSegmentsView(session: session)
-            } else if !lastTranscript.isEmpty {
-                Text(lastTranscript)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18)
-                    .font(.body)
             } else {
                 idlePlaceholder
             }
@@ -285,11 +264,9 @@ private var idlePlaceholder: some View {
     }
 
     private var displayTranscript: String {
-        if let session = controller.session as? RecordingSession {
-            let segs = session.micTranscriber.segments.map { "[\(formatTimestamp($0.startSeconds))] \($0.text)" }
-            return segs.joined(separator: "\n")
-        }
-        return lastTranscript
+        guard let session = controller.session as? RecordingSession else { return "" }
+        let segs = session.micTranscriber.segments.map { "[\(formatTimestamp($0.startSeconds))] \($0.text)" }
+        return segs.joined(separator: "\n")
     }
 
     private func copyTranscriptToPasteboard() {
@@ -309,16 +286,6 @@ private var idlePlaceholder: some View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    private func loadLastTranscript() async {
-        let dir = AppSettings.shared.notesDirectory
-        let meetings = (try? await MeetingLibrary.load(from: dir)) ?? []
-        guard let latest = meetings.first else {
-            lastTranscript = ""
-            return
-        }
-        let url = latest.transcriptURL ?? latest.legacyCombinedURL ?? latest.primaryURL
-        lastTranscript = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    }
 }
 
 private struct PendingImport: Identifiable {

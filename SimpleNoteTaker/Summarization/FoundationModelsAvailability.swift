@@ -9,7 +9,7 @@ import Foundation
 enum FoundationModelsAvailability {
     /// Returns nil if the model is available and ready to use.
     /// Otherwise returns a short message suitable for display to the user.
-    static func currentMessage() -> String? {
+    nonisolated static func currentMessage() -> String? {
         let model = SystemLanguageModel.default
         guard !model.isAvailable else { return nil }
         let detail = String(describing: model.availability).lowercased()

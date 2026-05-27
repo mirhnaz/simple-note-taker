@@ -39,9 +39,11 @@ struct OllamaClient: Sendable {
         self.session = session
     }
 
-    func listModels() async throws -> [OllamaModel] {
+    func listModels(timeout: TimeInterval = 60) async throws -> [OllamaModel] {
         let url = baseURL.appending(path: "/api/tags")
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        let (data, response) = try await session.data(for: request)
         try Self.checkOK(response: response, data: data)
         do {
             return try JSONDecoder().decode(ModelsListResponse.self, from: data).models

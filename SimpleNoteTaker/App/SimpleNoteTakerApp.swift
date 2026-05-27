@@ -1,10 +1,15 @@
 import SwiftUI
+import os
+
+private let startupLog = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "startup")
 
 @main
 struct SimpleNoteTakerApp: App {
     init() {
+        startupLog.info("app init begin")
         _ = try? Paths.ensureDirectoryExists(AppSettings.shared.notesDirectory)
         _ = try? Paths.ensureDirectoryExists(AppSettings.shared.audioDirectory)
+        startupLog.info("app init end")
     }
 
     var body: some Scene {

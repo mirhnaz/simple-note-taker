@@ -52,33 +52,39 @@ final class RecordingController {
     /// Models needs Apple Intelligence enabled and the on-device model
     /// downloaded; Ollama needs the server running and the configured model
     /// pulled. Drives whether Record + Import are usable in the UI.
+    /// Runs the actual probe off MainActor so neither the Apple framework
+    /// access nor the Ollama HTTP call can block UI rendering.
     func refreshSummarizerStatus() async {
         let settings = AppSettings.shared
-        switch settings.llmProvider {
-        case .apple:
-            if let message = FoundationModelsAvailability.currentMessage() {
-                summarizerStatus = .unavailable(message)
-            } else {
-                summarizerStatus = .ready
-            }
-        case .ollama:
-            let modelName = settings.ollamaModel.trimmingCharacters(in: .whitespaces)
-            guard !modelName.isEmpty else {
-                summarizerStatus = .unavailable("No Ollama model selected. Open Settings and pick one.")
-                return
-            }
-            let baseURL = settings.ollamaBaseURL
-            do {
-                let models = try await OllamaClient(baseURL: baseURL).listModels()
-                if models.contains(where: { $0.name == modelName }) {
-                    summarizerStatus = .ready
-                } else {
-                    summarizerStatus = .unavailable("Ollama model '\(modelName)' isn't pulled yet. Run `ollama pull \(modelName)` in a terminal, then click Retry.")
+        let provider = settings.llmProvider
+        let baseURL = settings.ollamaBaseURL
+        let modelName = settings.ollamaModel.trimmingCharacters(in: .whitespaces)
+        let status = await Task.detached(priority: .userInitiated) { () -> SummarizerStatus in
+            switch provider {
+            case .apple:
+                if let message = FoundationModelsAvailability.currentMessage() {
+                    return .unavailable(message)
                 }
-            } catch {
-                summarizerStatus = .unavailable("Can't reach Ollama at \(baseURL.absoluteString). Start Ollama and click Retry, or switch to Apple Foundation Models in Settings.")
+                return .ready
+            case .ollama:
+                guard !modelName.isEmpty else {
+                    return .unavailable("No Ollama model selected. Open Settings and pick one.")
+                }
+                do {
+                    // Short timeout for a status probe — localhost should
+                    // answer in milliseconds when Ollama is running.
+                    let models = try await OllamaClient(baseURL: baseURL).listModels(timeout: 3)
+                    if models.contains(where: { $0.name == modelName }) {
+                        return .ready
+                    } else {
+                        return .unavailable("Ollama model '\(modelName)' isn't pulled yet. Run `ollama pull \(modelName)` in a terminal, then click Retry.")
+                    }
+                } catch {
+                    return .unavailable("Can't reach Ollama at \(baseURL.absoluteString). Start Ollama and click Retry, or switch to Apple Foundation Models in Settings.")
+                }
             }
-        }
+        }.value
+        self.summarizerStatus = status
     }
 
     func start() async {
