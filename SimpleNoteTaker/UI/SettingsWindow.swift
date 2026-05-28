@@ -3,11 +3,19 @@ import AppKit
 
 struct MLXWhisperPreset: Identifiable, Hashable {
     let modelID: String
-    let displayName: String
     let qualityHint: String
 
     var id: String { modelID }
-    var menuLabel: String { "\(displayName) — \(qualityHint)" }
+    /// Repo name without the owner prefix (e.g. "whisper-base-mlx"), matching
+    /// what users see on huggingface.co. Avoids inventing friendly labels like
+    /// "Base"/"Large" that drift from the actual HF model IDs.
+    var repoName: String {
+        if let slash = modelID.firstIndex(of: "/") {
+            return String(modelID[modelID.index(after: slash)...])
+        }
+        return modelID
+    }
+    var menuLabel: String { "\(repoName) — \(qualityHint)" }
 }
 
 struct OllamaSuggestedModel: Identifiable, Hashable {
@@ -169,9 +177,9 @@ private struct TranscriptionSettingsTab: View {
     @State private var mlxDownloadingModel: String?
 
     static let mlxWhisperPresets: [MLXWhisperPreset] = [
-        .init(modelID: "mlx-community/whisper-base", displayName: "Base", qualityHint: "best for realtime"),
-        .init(modelID: "mlx-community/whisper-large-v3-turbo", displayName: "Large v3 Turbo", qualityHint: "balanced"),
-        .init(modelID: "mlx-community/whisper-large-v3-mlx", displayName: "Large v3", qualityHint: "highest accuracy")
+        .init(modelID: "mlx-community/whisper-base-mlx", qualityHint: "fastest"),
+        .init(modelID: "mlx-community/whisper-large-v3-turbo", qualityHint: "balanced"),
+        .init(modelID: "mlx-community/whisper-large-v3-mlx", qualityHint: "highest accuracy")
     ]
 
     var body: some View {
@@ -279,8 +287,10 @@ private struct TranscriptionSettingsTab: View {
     }
 
     private func mlxModelDisplayName(_ modelID: String) -> String {
-        if let preset = Self.mlxWhisperPresets.first(where: { $0.modelID == modelID }) {
-            return preset.displayName
+        // Strip the owner prefix so the status pill stays compact and matches
+        // the repo names shown in the picker.
+        if let slash = modelID.firstIndex(of: "/") {
+            return String(modelID[modelID.index(after: slash)...])
         }
         return modelID
     }
