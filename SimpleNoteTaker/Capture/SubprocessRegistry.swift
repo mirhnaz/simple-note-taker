@@ -45,16 +45,33 @@ final class SubprocessRegistry: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// SIGTERMs every still-running tracked process. Used both on app quit
-    /// (via willTerminateNotification) and when the user cancels an import.
+    /// SIGTERMs every still-running tracked process. Used on app quit
+    /// (via willTerminateNotification) where we don't care about clean
+    /// child cleanup.
     func terminateAll() {
         lock.lock()
         let active = Array(processes.values)
         lock.unlock()
         guard !active.isEmpty else { return }
-        log.info("terminating \(active.count, privacy: .public) child process(es)")
+        log.info("SIGTERM \(active.count, privacy: .public) child process(es)")
         for proc in active where proc.isRunning {
             proc.terminate()
+        }
+    }
+
+    /// SIGINTs every still-running tracked process. Preferred for
+    /// user-initiated cancel because Python translates SIGINT to
+    /// KeyboardInterrupt — letting mlx_whisper unwind cleanly (no leaked
+    /// multiprocessing semaphores) and return more responsively than
+    /// SIGTERM does during a Metal kernel.
+    func interruptAll() {
+        lock.lock()
+        let active = Array(processes.values)
+        lock.unlock()
+        guard !active.isEmpty else { return }
+        log.info("SIGINT \(active.count, privacy: .public) child process(es)")
+        for proc in active where proc.isRunning {
+            proc.interrupt()
         }
     }
 }

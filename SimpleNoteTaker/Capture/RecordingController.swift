@@ -198,6 +198,6 @@ final class RecordingController {
         guard case .transcribing = state else { return }
         guard importPhase != nil else { return }
         cancellingImport = true
-        SubprocessRegistry.shared.terminateAll()
+        SubprocessRegistry.shared.interruptAll()
     }
 }

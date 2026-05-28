@@ -14,7 +14,10 @@ enum ImportPhase: Equatable, Sendable {
             if let fraction, fraction > 0 {
                 return "Transcribing audio… \(Int(fraction * 100))%"
             }
-            return "Transcribing audio…"
+            // Before the first segment, mlx_whisper is loading the model and
+            // detecting language (30–60s on the large model). Spell that out
+            // so the spinner doesn't look frozen.
+            return "Loading model & detecting language…"
         case .summarizing: return "Summarizing…"
         case .writing: return "Saving meeting…"
         }

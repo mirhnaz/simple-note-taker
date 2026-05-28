@@ -322,7 +322,7 @@ enum MLXWhisperEnvironment {
             return
         }
         let fraction = min(1.0, max(0.0, endTime / durationSeconds))
-        log.info("mlx progress: \(String(format: "%.2f", fraction), privacy: .public) (end=\(String(format: "%.2f", endTime), privacy: .public)s / dur=\(String(format: "%.2f", durationSeconds), privacy: .public)s)")
+        log.debug("mlx progress: \(String(format: "%.2f", fraction), privacy: .public) (end=\(String(format: "%.2f", endTime), privacy: .public)s / dur=\(String(format: "%.2f", durationSeconds), privacy: .public)s)")
         onProgress(fraction)
     }
 
