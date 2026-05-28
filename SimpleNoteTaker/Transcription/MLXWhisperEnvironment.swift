@@ -264,6 +264,30 @@ enum MLXWhisperEnvironment {
         async let stdoutDrain: Void = drain(handle: stdout.fileHandleForReading, into: stdoutAccumulator)
         async let stderrDrain: Void = drain(handle: stderr.fileHandleForReading, into: stderrAccumulator)
 
+        // Wall-clock fallback: mlx_whisper buffers its stdout under uv-launched
+        // Python despite PYTHONUNBUFFERED=1, so segment-print parsing alone can
+        // sit silent for the whole run and surface only at exit. Emit an
+        // estimated fraction every second based on elapsed wall time / expected
+        // total. If real segments DO flow, they snap the bar to the truth via
+        // the monotonic throttler in ImportSession (segment-emitted fractions
+        // override stale wall-clock estimates).
+        let speedFactor = estimatedRealtimeSpeed(forModel: model)
+        let walltimeTicker = audioDurationSeconds > 0 ? Task { [audioDurationSeconds] in
+            let started = Date()
+            let estimatedTotal = max(1.0, audioDurationSeconds / speedFactor)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(1000))
+                if Task.isCancelled { break }
+                let elapsed = Date().timeIntervalSince(started)
+                // Cap at 0.99 so we never claim 100% before the subprocess
+                // actually exits — the final "transcribing → summarizing"
+                // transition is the only thing that should advance past 99%.
+                let fraction = min(0.99, elapsed / estimatedTotal)
+                onProgress(fraction)
+            }
+        } : nil
+        defer { walltimeTicker?.cancel() }
+
         SubprocessRegistry.shared.track(process)
         try await Task.detached(priority: .userInitiated) {
             try process.run()
@@ -333,6 +357,21 @@ enum MLXWhisperEnvironment {
         let fraction = min(1.0, max(0.0, endTime / durationSeconds))
         log.debug("mlx progress: \(String(format: "%.2f", fraction), privacy: .public) (end=\(String(format: "%.2f", endTime), privacy: .public)s / dur=\(String(format: "%.2f", durationSeconds), privacy: .public)s)")
         onProgress(fraction)
+    }
+
+    /// Rough realtime-multiple estimate per model family, used only for the
+    /// wall-clock progress estimator. Tuned for Apple Silicon (M-series); the
+    /// numbers don't need to be precise — they decide how fast the fallback
+    /// bar advances when segment prints are stuck in mlx_whisper's stdout
+    /// buffer. If real segments arrive they override the estimate.
+    private static func estimatedRealtimeSpeed(forModel modelID: String) -> Double {
+        let lower = modelID.lowercased()
+        if lower.contains("turbo") { return 5.0 }
+        if lower.contains("base") || lower.contains("tiny") { return 8.0 }
+        if lower.contains("small") { return 4.0 }
+        if lower.contains("medium") { return 2.5 }
+        if lower.contains("large") { return 1.5 }
+        return 3.0
     }
 
     private static func parseTimestamp(_ s: String) -> Double? {

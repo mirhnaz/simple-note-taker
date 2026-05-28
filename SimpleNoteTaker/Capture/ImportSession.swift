@@ -137,13 +137,16 @@ enum ImportSession {
 
     /// Throttles progress callbacks so we only forward updates after the
     /// fraction has advanced by at least 0.005 (0.5%), keeping the MainActor
-    /// dispatch rate reasonable on long files.
+    /// dispatch rate reasonable on long files. Also enforces monotonicity —
+    /// segment-emitted fractions and the wall-clock fallback ticker race
+    /// against each other, and we never want the bar to visibly regress.
     private final class ProgressTracker: @unchecked Sendable {
         private let lock = NSLock()
         private var lastReported: Double = -1
 
         func shouldReport(_ fraction: Double) -> Bool {
             lock.lock(); defer { lock.unlock() }
+            if fraction < lastReported { return false }
             if fraction >= 1.0 || fraction - lastReported >= 0.005 {
                 lastReported = fraction
                 return true
