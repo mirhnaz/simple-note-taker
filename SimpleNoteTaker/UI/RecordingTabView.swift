@@ -243,6 +243,17 @@ private var idlePlaceholder: some View {
                 }
                 Text(controller.importPhase?.label ?? "Transcribing & summarizing…")
                     .foregroundStyle(.secondary)
+                if case .transcribing = controller.importPhase {
+                    Button {
+                        controller.cancelImport()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .imageScale(.large)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel import")
+                }
             }
         }
         .padding(.horizontal, 20)

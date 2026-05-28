@@ -45,12 +45,14 @@ final class SubprocessRegistry: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func terminateAll() {
+    /// SIGTERMs every still-running tracked process. Used both on app quit
+    /// (via willTerminateNotification) and when the user cancels an import.
+    func terminateAll() {
         lock.lock()
         let active = Array(processes.values)
         lock.unlock()
         guard !active.isEmpty else { return }
-        log.info("terminating \(active.count, privacy: .public) child process(es) on app quit")
+        log.info("terminating \(active.count, privacy: .public) child process(es)")
         for proc in active where proc.isRunning {
             proc.terminate()
         }

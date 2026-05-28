@@ -37,6 +37,7 @@ final class RecordingController {
     private(set) var session: AudioRecorder?
     private(set) var importPhase: ImportPhase?
     private(set) var summarizerStatus: SummarizerStatus = .checking
+    private var cancellingImport = false
     private let startSession: () async throws -> AudioRecorder
     private let requestPermissions: () async -> Permissions.Status
 
@@ -164,6 +165,8 @@ final class RecordingController {
         }
         self.state = .transcribing(startedAt: Date())
         self.lastWarning = nil
+        self.lastError = nil
+        self.cancellingImport = false
         self.importPhase = .transcribing(fraction: nil)
         do {
             let url = try await ImportSession.run(
@@ -176,9 +179,25 @@ final class RecordingController {
             self.lastError = nil
             applyAppleIntelligenceWarningIfNeeded()
         } catch {
-            self.lastError = "Import failed: \(error.localizedDescription)"
+            if cancellingImport {
+                self.lastWarning = "Import cancelled."
+            } else {
+                self.lastError = "Import failed: \(error.localizedDescription)"
+            }
         }
+        self.cancellingImport = false
         self.importPhase = nil
         self.state = .idle
+    }
+
+    /// User-initiated cancel for an in-progress import. Sends SIGTERM to any
+    /// running child process (mlx_whisper / ffmpeg); the resulting non-zero
+    /// exit unwinds the await chain in `importRecording` and the catch block
+    /// turns the thrown error into the "Import cancelled." warning.
+    func cancelImport() {
+        guard case .transcribing = state else { return }
+        guard importPhase != nil else { return }
+        cancellingImport = true
+        SubprocessRegistry.shared.terminateAll()
     }
 }
