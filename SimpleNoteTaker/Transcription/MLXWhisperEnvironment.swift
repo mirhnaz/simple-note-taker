@@ -185,8 +185,33 @@ enum MLXWhisperEnvironment {
         log.info("warmup completed for model: \(model, privacy: .public)")
     }
 
+    /// Loads the playable duration (in seconds) of an audio/video file via
+    /// AVURLAsset. Returns nil if the duration is indeterminate or load fails.
+    static func loadAudioDurationSeconds(for url: URL) async -> Double? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = duration.seconds
+            guard seconds.isFinite, seconds > 0 else { return nil }
+            return seconds
+        } catch {
+            return nil
+        }
+    }
+
     /// Runs mlx-whisper and returns the path to the .json output it produced.
-    static func runMLXWhisper(executable: URL, audio: URL, model: String, outputDir: URL) async throws -> URL {
+    /// While running, streams stdout/stderr live and calls `onProgress` with a
+    /// 0.0...1.0 fraction parsed from mlx_whisper's `[mm:ss.xxx --> mm:ss.xxx]`
+    /// segment prints (divided by `audioDurationSeconds`). If the duration
+    /// isn't known (0), progress just never fires.
+    static func runMLXWhisper(
+        executable: URL,
+        audio: URL,
+        model: String,
+        outputDir: URL,
+        audioDurationSeconds: Double = 0,
+        onProgress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> URL {
         let process = Process()
         process.executableURL = executable
         process.arguments = [
@@ -203,13 +228,25 @@ enum MLXWhisperEnvironment {
         process.standardOutput = stdout
         process.standardError = stderr
 
+        let stdoutAccumulator = LineAccumulator(onLine: { line in
+            handleMLXProgressLine(line, durationSeconds: audioDurationSeconds, onProgress: onProgress)
+        })
+        let stderrAccumulator = LineAccumulator(onLine: { line in
+            handleMLXProgressLine(line, durationSeconds: audioDurationSeconds, onProgress: onProgress)
+        })
+
+        async let stdoutDrain: Void = drain(handle: stdout.fileHandleForReading, into: stdoutAccumulator)
+        async let stderrDrain: Void = drain(handle: stderr.fileHandleForReading, into: stderrAccumulator)
+
         try await Task.detached {
             try process.run()
             process.waitUntilExit()
         }.value
 
-        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        _ = await (stdoutDrain, stderrDrain)
+
+        let stdoutText = stdoutAccumulator.text
+        let stderrText = stderrAccumulator.text
 
         guard process.terminationStatus == 0 else {
             log.error("mlx_whisper exit \(Int(process.terminationStatus), privacy: .public). stderr: \(stderrText, privacy: .public)")
@@ -232,6 +269,46 @@ enum MLXWhisperEnvironment {
         let listing = (try? FileManager.default.contentsOfDirectory(atPath: outputDir.path(percentEncoded: false))) ?? []
         log.error("no json output. dir contents: \(listing, privacy: .public). stdout: \(stdoutText, privacy: .public). stderr: \(stderrText, privacy: .public)")
         throw MLXWhisperError.outputMissing(expected: expected)
+    }
+
+    private static func drain(handle: FileHandle, into accumulator: LineAccumulator) async {
+        do {
+            for try await line in handle.bytes.lines {
+                accumulator.append(line)
+            }
+        } catch {
+            // pipe closed early or read failed — fine, we'll surface whatever we got.
+        }
+    }
+
+    /// Matches the end-timestamp in mlx_whisper's segment print, e.g.
+    /// "[00:01.234 --> 00:05.678] Hello" or "[01:02:03.456 --> 01:02:08.000] …".
+    private static let mlxSegmentRegex = #/-->\s*((?:\d+:)?\d+:\d+\.\d+)\]/#
+
+    private static func handleMLXProgressLine(
+        _ line: String,
+        durationSeconds: Double,
+        onProgress: @Sendable (Double) -> Void
+    ) {
+        guard durationSeconds > 0 else { return }
+        guard let match = try? mlxSegmentRegex.firstMatch(in: line) else { return }
+        let endStr = String(match.output.1)
+        guard let endTime = parseTimestamp(endStr) else { return }
+        let fraction = min(1.0, max(0.0, endTime / durationSeconds))
+        onProgress(fraction)
+    }
+
+    private static func parseTimestamp(_ s: String) -> Double? {
+        let parts = s.split(separator: ":").map(String.init)
+        guard let last = parts.last, let seconds = Double(last) else { return nil }
+        var total = seconds
+        var multiplier = 60.0
+        for part in parts.dropLast().reversed() {
+            guard let n = Double(part) else { return nil }
+            total += n * multiplier
+            multiplier *= 60
+        }
+        return total
     }
 
     private static func whichOnPath(_ name: String) -> URL? {
@@ -275,6 +352,32 @@ enum MLXWhisperEnvironment {
         buffer.frameLength = frameCount
         // PCM buffer is zero-initialized → already silent.
         try file.write(from: buffer)
+    }
+}
+
+/// Drains a child process pipe into a single accumulated string while
+/// invoking `onLine` for each `\n`-terminated line as it arrives.
+/// Thread-safe — the drain task reads from a private GCD queue under the hood.
+final class LineAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fullText = ""
+    private let onLine: @Sendable (String) -> Void
+
+    init(onLine: @escaping @Sendable (String) -> Void) {
+        self.onLine = onLine
+    }
+
+    func append(_ line: String) {
+        lock.lock()
+        fullText.append(line)
+        fullText.append("\n")
+        lock.unlock()
+        onLine(line)
+    }
+
+    var text: String {
+        lock.lock(); defer { lock.unlock() }
+        return fullText
     }
 }
 

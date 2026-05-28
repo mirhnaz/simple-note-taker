@@ -13,7 +13,11 @@ struct MLXWhisperTranscriber: FileTranscribing {
         self.executablePathOverride = executablePathOverride
     }
 
-    func transcribe(audioFile url: URL, kind: AudioKind) async throws -> [TranscriptSegment] {
+    func transcribe(
+        audioFile url: URL,
+        kind: AudioKind,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> [TranscriptSegment] {
         guard let exec = MLXWhisperEnvironment.detectInstallation(overridePath: executablePathOverride) else {
             throw MLXWhisperError.notInstalled
         }
@@ -25,11 +29,14 @@ struct MLXWhisperTranscriber: FileTranscribing {
         defer { try? FileManager.default.removeItem(at: outputDir) }
 
         log.info("transcribing \(url.lastPathComponent, privacy: .public) with model \(model, privacy: .public)")
+        let totalDuration = await MLXWhisperEnvironment.loadAudioDurationSeconds(for: url) ?? 0
         let jsonURL = try await MLXWhisperEnvironment.runMLXWhisper(
             executable: exec,
             audio: url,
             model: model,
-            outputDir: outputDir
+            outputDir: outputDir,
+            audioDurationSeconds: totalDuration,
+            onProgress: onProgress
         )
         let data = try Data(contentsOf: jsonURL)
         return try Self.parseSegments(jsonData: data, kind: kind)

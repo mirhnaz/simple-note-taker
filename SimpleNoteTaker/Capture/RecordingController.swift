@@ -164,7 +164,7 @@ final class RecordingController {
         }
         self.state = .transcribing(startedAt: Date())
         self.lastWarning = nil
-        self.importPhase = .transcribing
+        self.importPhase = .transcribing(fraction: nil)
         do {
             let url = try await ImportSession.run(
                 sourceURL: sourceURL,

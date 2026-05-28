@@ -4,16 +4,27 @@ import os
 private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "import")
 
 enum ImportPhase: Equatable, Sendable {
-    case transcribing
+    case transcribing(fraction: Double?)
     case summarizing
     case writing
 
     var label: String {
         switch self {
-        case .transcribing: return "Transcribing audio…"
+        case .transcribing(let fraction):
+            if let fraction, fraction > 0 {
+                return "Transcribing audio… \(Int(fraction * 100))%"
+            }
+            return "Transcribing audio…"
         case .summarizing: return "Summarizing…"
         case .writing: return "Saving meeting…"
         }
+    }
+
+    /// 0.0...1.0 for the transcribing phase if known, nil otherwise.
+    /// Lets the UI switch between determinate and indeterminate ProgressView.
+    var transcriptionFraction: Double? {
+        if case .transcribing(let fraction) = self { return fraction }
+        return nil
     }
 }
 
@@ -30,7 +41,7 @@ enum ImportSession {
         settings: AppSettings = .shared,
         summarizer: (any Summarizing)? = nil,
         fileTranscriber: (any FileTranscribing)? = nil,
-        onPhase: @MainActor @Sendable (ImportPhase) async -> Void = { _ in }
+        onPhase: @escaping @MainActor @Sendable (ImportPhase) async -> Void = { _ in }
     ) async throws -> URL {
         let summarizer = summarizer ?? settings.makeSummarizer()
         let fileTranscriber = fileTranscriber ?? settings.makeFileTranscriber()
@@ -39,10 +50,20 @@ enum ImportSession {
         let resolvedDate = meetingDate ?? defaultMeetingDate(for: sourceURL)
         log.info("import starting: \(sourceURL.lastPathComponent, privacy: .public), date \(resolvedDate, privacy: .public)")
 
-        await onPhase(.transcribing)
+        await onPhase(.transcribing(fraction: nil))
+        let progressTracker = ProgressTracker()
+        let progressCallback: @Sendable (Double) -> Void = { fraction in
+            // Throttle: only fire on a meaningful step so we don't flood the
+            // MainActor with hundreds of identical updates.
+            guard progressTracker.shouldReport(fraction) else { return }
+            Task { @MainActor in
+                await onPhase(.transcribing(fraction: fraction))
+            }
+        }
         let (segments, scratchFiles) = try await prepareAndTranscribe(
             sourceURL: sourceURL,
-            transcriber: fileTranscriber
+            transcriber: fileTranscriber,
+            onProgress: progressCallback
         )
         defer { scratchFiles.forEach { try? FileManager.default.removeItem(at: $0) } }
         log.info("import segments: \(segments.count, privacy: .public)")
@@ -72,26 +93,27 @@ enum ImportSession {
     /// Returns segments plus any temp files the caller must clean up.
     private static func prepareAndTranscribe(
         sourceURL: URL,
-        transcriber: any FileTranscribing
+        transcriber: any FileTranscribing,
+        onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> ([TranscriptSegment], [URL]) {
         // Video containers (mp4, mov, …) can never be fed to AVAudioFile and
         // are flaky through AVAssetExportSession, so always pre-extract via
         // ffmpeg before the transcriber sees them.
         if AudioNormalization.isVideoFile(sourceURL) {
             let normalized = try await AudioNormalization.normalize(source: sourceURL)
-            let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized)
+            let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized, onProgress: onProgress)
             return (segments, [normalized])
         }
 
         do {
-            let segments = try await runTranscriber(transcriber: transcriber, audioURL: sourceURL)
+            let segments = try await runTranscriber(transcriber: transcriber, audioURL: sourceURL, onProgress: onProgress)
             return (segments, [])
         } catch {
             log.warning("initial transcription failed (\(error.localizedDescription, privacy: .public)); retrying after normalize")
             let originalError = error
             do {
                 let normalized = try await AudioNormalization.normalize(source: sourceURL)
-                let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized)
+                let segments = try await runTranscriber(transcriber: transcriber, audioURL: normalized, onProgress: onProgress)
                 return (segments, [normalized])
             } catch {
                 log.error("retry after normalize also failed: \(error.localizedDescription, privacy: .public)")
@@ -102,10 +124,28 @@ enum ImportSession {
 
     private static func runTranscriber(
         transcriber: any FileTranscribing,
-        audioURL: URL
+        audioURL: URL,
+        onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> [TranscriptSegment] {
         try await withTimeout(seconds: fileTranscriptionTimeoutSeconds) {
-            try await transcriber.transcribe(audioFile: audioURL, kind: .mic)
+            try await transcriber.transcribe(audioFile: audioURL, kind: .mic, onProgress: onProgress)
+        }
+    }
+
+    /// Throttles progress callbacks so we only forward updates after the
+    /// fraction has advanced by at least 0.005 (0.5%), keeping the MainActor
+    /// dispatch rate reasonable on long files.
+    private final class ProgressTracker: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lastReported: Double = -1
+
+        func shouldReport(_ fraction: Double) -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if fraction >= 1.0 || fraction - lastReported >= 0.005 {
+                lastReported = fraction
+                return true
+            }
+            return false
         }
     }
 

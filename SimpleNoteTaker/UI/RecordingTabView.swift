@@ -72,7 +72,14 @@ struct RecordingTabView: View {
             .background(Capsule().fill(.red.opacity(0.10)))
         case .transcribing:
             HStack(spacing: 5) {
-                ProgressView().controlSize(.mini)
+                if let fraction = controller.importPhase?.transcriptionFraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .controlSize(.mini)
+                        .frame(width: 80)
+                } else {
+                    ProgressView().controlSize(.mini)
+                }
                 Text(controller.importPhase?.label ?? "Processing")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -226,7 +233,14 @@ private var idlePlaceholder: some View {
                         .foregroundStyle(.red)
                 }
             case .transcribing:
-                ProgressView().controlSize(.small)
+                if let fraction = controller.importPhase?.transcriptionFraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .controlSize(.small)
+                        .frame(width: 120)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
                 Text(controller.importPhase?.label ?? "Transcribing & summarizing…")
                     .foregroundStyle(.secondary)
             }
