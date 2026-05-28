@@ -72,11 +72,16 @@ enum AudioNormalization {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = MLXWhisperEnvironment.augmentedPATH
         process.environment = env
+        // User is waiting on the import to finish — keep the subprocess on
+        // performance cores. Without this it inherits the parent task's QoS
+        // (often .utility under Swift concurrency) and macOS routes it to
+        // efficiency cores, throttling ffmpeg badly.
+        process.qualityOfService = .userInitiated
         let stderr = Pipe()
         process.standardError = stderr
         process.standardOutput = Pipe()
 
-        try await Task.detached {
+        try await Task.detached(priority: .userInitiated) {
             try process.run()
             process.waitUntilExit()
         }.value

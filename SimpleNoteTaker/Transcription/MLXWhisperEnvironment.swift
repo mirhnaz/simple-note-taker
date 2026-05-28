@@ -223,6 +223,12 @@ enum MLXWhisperEnvironment {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = augmentedPATH
         process.environment = env
+        // Keep the subprocess on performance cores. Without this it inherits
+        // the parent Task's QoS (typically .utility under Swift concurrency),
+        // and macOS routes the work to efficiency cores and throttles Metal
+        // scheduling — which manifests as long transcription times with both
+        // CPU and GPU sitting nearly idle in Activity Monitor.
+        process.qualityOfService = .userInitiated
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout
@@ -238,7 +244,7 @@ enum MLXWhisperEnvironment {
         async let stdoutDrain: Void = drain(handle: stdout.fileHandleForReading, into: stdoutAccumulator)
         async let stderrDrain: Void = drain(handle: stderr.fileHandleForReading, into: stderrAccumulator)
 
-        try await Task.detached {
+        try await Task.detached(priority: .userInitiated) {
             try process.run()
             process.waitUntilExit()
         }.value
