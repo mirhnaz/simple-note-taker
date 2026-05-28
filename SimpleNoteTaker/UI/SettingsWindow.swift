@@ -163,6 +163,7 @@ private struct TranscriptionSettingsTab: View {
 
     @State private var mlxInstallPath: URL?
     @State private var mlxCachedSizes: [String: Int64] = [:]
+    @State private var mlxDiscoveredCachedIDs: [String] = []
     @State private var mlxFFmpegInstalled = false
     @State private var mlxDownloadStatus: String?
     @State private var mlxDownloadingModel: String?
@@ -215,6 +216,14 @@ private struct TranscriptionSettingsTab: View {
             }
         }
         .onChange(of: mlxWhisperPath) { _, _ in refreshMLXStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Catches downloads performed via `hf` / `huggingface-cli` in a
+            // terminal while Settings was still open — without this the user
+            // would have to click the Refresh button.
+            if transcriptionProviderRaw == TranscriptionProvider.mlxWhisper.rawValue {
+                refreshMLXStatus()
+            }
+        }
     }
 
     private var statusPill: some View {
@@ -282,6 +291,7 @@ private struct TranscriptionSettingsTab: View {
             LabeledContent("Model") {
                 Picker("Model", selection: $mlxWhisperModel) {
                     if !Self.mlxWhisperPresets.contains(where: { $0.modelID == mlxWhisperModel }),
+                       !mlxDiscoveredCachedIDs.contains(mlxWhisperModel),
                        !mlxWhisperModel.isEmpty {
                         modelRow(
                             label: "\(mlxWhisperModel) (custom)",
@@ -298,6 +308,22 @@ private struct TranscriptionSettingsTab: View {
                             trailing: mlxCachedSizes[preset.modelID].map { formatBytes($0) }
                         )
                         .tag(preset.modelID)
+                    }
+                    let extras = mlxDiscoveredCachedIDs.filter { id in
+                        !Self.mlxWhisperPresets.contains(where: { $0.modelID == id })
+                    }
+                    if !extras.isEmpty {
+                        Divider()
+                        Section("Already downloaded") {
+                            ForEach(extras, id: \.self) { id in
+                                modelRow(
+                                    label: id,
+                                    isReady: true,
+                                    trailing: mlxCachedSizes[id].map { formatBytes($0) }
+                                )
+                                .tag(id)
+                            }
+                        }
                     }
                 }
                 .labelsHidden()
@@ -392,12 +418,21 @@ private struct TranscriptionSettingsTab: View {
 
     private func refreshMLXStatus() {
         mlxInstallPath = MLXWhisperEnvironment.detectInstallation(overridePath: mlxWhisperPath)
+
+        let discovered = MLXWhisperEnvironment.discoverCachedMLXWhisperModels()
+        mlxDiscoveredCachedIDs = discovered.map(\.modelID)
+
         var sizes: [String: Int64] = [:]
+        for (id, size) in discovered { sizes[id] = size }
+
+        // Also size-check the preset IDs and the currently-selected model, in
+        // case they're cached but the discovery filter didn't pick them up
+        // (e.g. non-mlx-community owners surfaced via Advanced).
         var idsToCheck = Self.mlxWhisperPresets.map { $0.modelID }
         if !mlxWhisperModel.isEmpty, !idsToCheck.contains(mlxWhisperModel) {
             idsToCheck.append(mlxWhisperModel)
         }
-        for modelID in idsToCheck {
+        for modelID in idsToCheck where sizes[modelID] == nil {
             if let size = MLXWhisperEnvironment.modelDiskSize(modelID) {
                 sizes[modelID] = size
             }

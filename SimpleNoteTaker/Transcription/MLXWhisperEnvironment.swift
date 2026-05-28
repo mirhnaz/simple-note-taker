@@ -72,8 +72,23 @@ enum MLXWhisperEnvironment {
         return whichOnPath("ffmpeg")
     }
 
+    /// Resolves the Hugging Face hub cache root, honoring `HF_HUB_CACHE`
+    /// (most specific), then `HF_HOME`, then the default `~/.cache/huggingface/hub`.
+    /// huggingface_hub respects this same precedence.
+    static var hubCacheURL: URL {
+        let env = ProcessInfo.processInfo.environment
+        if let explicit = env["HF_HUB_CACHE"], !explicit.isEmpty {
+            return URL(filePath: (explicit as NSString).expandingTildeInPath)
+        }
+        if let hfHome = env["HF_HOME"], !hfHome.isEmpty {
+            return URL(filePath: (hfHome as NSString).expandingTildeInPath).appending(path: "hub")
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appending(path: ".cache/huggingface/hub")
+    }
+
     /// True if Hugging Face has the model snapshot directory locally.
-    /// HF caches under: ~/.cache/huggingface/hub/models--<owner>--<name>/snapshots/<rev>/
+    /// HF caches under: <hubCache>/models--<owner>--<name>/snapshots/<rev>/
     /// (replacing all `/` in the repo id with `--`).
     static func isModelCached(_ name: String, fileManager: FileManager = .default) -> Bool {
         let cacheURL = modelCacheURL(name)
@@ -95,8 +110,35 @@ enum MLXWhisperEnvironment {
 
     static func modelCacheURL(_ name: String) -> URL {
         let folder = "models--" + name.replacingOccurrences(of: "/", with: "--")
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appending(path: ".cache/huggingface/hub").appending(path: folder)
+        return hubCacheURL.appending(path: folder)
+    }
+
+    /// Scans the HF hub cache for already-downloaded MLX whisper models.
+    /// Returns (modelID, byteSize) for each `models--mlx-community--whisper*`
+    /// folder that has snapshot content. Lets the picker surface models the
+    /// user pulled with `hf` / `huggingface-cli` directly, even if they aren't
+    /// in the app's preset list.
+    static func discoverCachedMLXWhisperModels(fileManager: FileManager = .default) -> [(modelID: String, size: Int64)] {
+        let hub = hubCacheURL
+        let prefix = "models--mlx-community--whisper"
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: hub.path(percentEncoded: false)) else {
+            return []
+        }
+        var results: [(modelID: String, size: Int64)] = []
+        for entry in entries where entry.hasPrefix(prefix) {
+            // HF replaces each `/` in the repo id with `--`. Repo ids are always
+            // `owner/name` (one slash), so there's exactly one `--` separator
+            // after stripping the `models--` prefix.
+            let stripped = String(entry.dropFirst("models--".count))
+            guard let sep = stripped.range(of: "--") else { continue }
+            let owner = String(stripped[..<sep.lowerBound])
+            let name = String(stripped[sep.upperBound...])
+            let modelID = "\(owner)/\(name)"
+            guard isModelCached(modelID, fileManager: fileManager) else { continue }
+            let size = modelDiskSize(modelID, fileManager: fileManager) ?? 0
+            results.append((modelID, size))
+        }
+        return results.sorted { $0.modelID < $1.modelID }
     }
 
     /// Sums the sizes of every blob in the HF cache for this model. The
