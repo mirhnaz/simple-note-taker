@@ -192,9 +192,14 @@ enum MLXWhisperEnvironment {
         do {
             let duration = try await asset.load(.duration)
             let seconds = duration.seconds
-            guard seconds.isFinite, seconds > 0 else { return nil }
+            guard seconds.isFinite, seconds > 0 else {
+                log.warning("audio duration not finite/positive for \(url.lastPathComponent, privacy: .public): \(seconds)")
+                return nil
+            }
+            log.info("audio duration for \(url.lastPathComponent, privacy: .public): \(String(format: "%.2f", seconds), privacy: .public)s")
             return seconds
         } catch {
+            log.warning("audio duration load failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
@@ -303,11 +308,21 @@ enum MLXWhisperEnvironment {
         durationSeconds: Double,
         onProgress: @Sendable (Double) -> Void
     ) {
-        guard durationSeconds > 0 else { return }
-        guard let match = try? mlxSegmentRegex.firstMatch(in: line) else { return }
+        guard durationSeconds > 0 else {
+            log.debug("mlx progress: duration=0, skipping line: \(line, privacy: .public)")
+            return
+        }
+        guard let match = try? mlxSegmentRegex.firstMatch(in: line) else {
+            log.debug("mlx no match: \(line, privacy: .public)")
+            return
+        }
         let endStr = String(match.output.1)
-        guard let endTime = parseTimestamp(endStr) else { return }
+        guard let endTime = parseTimestamp(endStr) else {
+            log.warning("mlx timestamp parse failed: \(endStr, privacy: .public)")
+            return
+        }
         let fraction = min(1.0, max(0.0, endTime / durationSeconds))
+        log.info("mlx progress: \(String(format: "%.2f", fraction), privacy: .public) (end=\(String(format: "%.2f", endTime), privacy: .public)s / dur=\(String(format: "%.2f", durationSeconds), privacy: .public)s)")
         onProgress(fraction)
     }
 
