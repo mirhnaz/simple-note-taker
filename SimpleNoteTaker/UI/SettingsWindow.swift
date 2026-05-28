@@ -168,6 +168,7 @@ private struct TranscriptionSettingsTab: View {
     @AppStorage(SettingsKeys.transcriptionProvider) private var transcriptionProviderRaw: String = TranscriptionProvider.apple.rawValue
     @AppStorage(SettingsKeys.mlxWhisperModel) private var mlxWhisperModel: String = AppSettings.defaultMLXWhisperModel
     @AppStorage(SettingsKeys.mlxWhisperPath) private var mlxWhisperPath: String = ""
+    @AppStorage(SettingsKeys.mlxWhisperLanguage) private var mlxWhisperLanguage: String = AppSettings.defaultMLXWhisperLanguage
 
     @State private var mlxInstallPath: URL?
     @State private var mlxCachedSizes: [String: Int64] = [:]
@@ -415,6 +416,15 @@ private struct TranscriptionSettingsTab: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 Text("Leave blank to auto-detect via $PATH. Override only if mlx_whisper lives outside your shell PATH (e.g. in a pyenv or conda environment).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LabeledContent("Language") {
+                    TextField("en (blank = auto-detect)", text: $mlxWhisperLanguage)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text("Two-letter language code passed to mlx_whisper as --language. Leave blank to let mlx_whisper auto-detect on the first 30s of audio (adds ~3–5s per import). Defaults to \"en\".")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

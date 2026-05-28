@@ -7,10 +7,12 @@ private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "mlx-wh
 struct MLXWhisperTranscriber: FileTranscribing {
     let model: String
     let executablePathOverride: String
+    let language: String
 
-    init(model: String, executablePathOverride: String = "") {
+    init(model: String, executablePathOverride: String = "", language: String = "") {
         self.model = model
         self.executablePathOverride = executablePathOverride
+        self.language = language
     }
 
     func transcribe(
@@ -36,6 +38,7 @@ struct MLXWhisperTranscriber: FileTranscribing {
             model: model,
             outputDir: outputDir,
             audioDurationSeconds: totalDuration,
+            language: language,
             onProgress: onProgress
         )
         let data = try Data(contentsOf: jsonURL)

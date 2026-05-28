@@ -11,6 +11,7 @@ enum SettingsKeys {
     static let transcriptionProvider = "transcriptionProvider"
     static let mlxWhisperModel = "mlxWhisperModel"
     static let mlxWhisperPath = "mlxWhisperPath"
+    static let mlxWhisperLanguage = "mlxWhisperLanguage"
 }
 
 enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
@@ -49,6 +50,7 @@ struct AppSettings {
     static let defaultOllamaBaseURL = "http://localhost:11434"
     static let defaultOllamaTemperature: Double = 0.2
     static let defaultMLXWhisperModel = "mlx-community/whisper-large-v3-turbo"
+    static let defaultMLXWhisperLanguage = "en"
 
     var notesDirectory: URL {
         let stored = defaults.string(forKey: SettingsKeys.notesDirectoryPath) ?? ""
@@ -100,6 +102,18 @@ struct AppSettings {
         defaults.string(forKey: SettingsKeys.mlxWhisperPath) ?? ""
     }
 
+    /// Language code passed to mlx_whisper as `--language`. Empty means
+    /// auto-detect — slower by ~3–5s since mlx_whisper runs the encoder on
+    /// the first 30s of audio to identify the language. Defaults to "en"
+    /// because meetings are usually English; users with non-English audio
+    /// can clear this in Settings → Transcription → Advanced.
+    var mlxWhisperLanguage: String {
+        let raw = defaults.string(forKey: SettingsKeys.mlxWhisperLanguage)
+        // Distinguishes "never set" (use default "en") from "user set to
+        // empty string" (auto-detect requested).
+        return raw ?? Self.defaultMLXWhisperLanguage
+    }
+
     func makeSummarizer() -> any Summarizing {
         switch llmProvider {
         case .apple:
@@ -114,7 +128,11 @@ struct AppSettings {
         case .apple:
             return AppleFileTranscriber()
         case .mlxWhisper:
-            return MLXWhisperTranscriber(model: mlxWhisperModel, executablePathOverride: mlxWhisperPath)
+            return MLXWhisperTranscriber(
+                model: mlxWhisperModel,
+                executablePathOverride: mlxWhisperPath,
+                language: mlxWhisperLanguage
+            )
         }
     }
 }

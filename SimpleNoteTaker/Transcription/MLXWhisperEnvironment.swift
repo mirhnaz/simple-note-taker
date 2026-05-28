@@ -215,16 +215,25 @@ enum MLXWhisperEnvironment {
         model: String,
         outputDir: URL,
         audioDurationSeconds: Double = 0,
+        language: String = "",
         onProgress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> URL {
         let process = Process()
         process.executableURL = executable
-        process.arguments = [
+        var args = [
             audio.path(percentEncoded: false),
             "--model", model,
             "--output-format", "json",
             "--output-dir", outputDir.path(percentEncoded: false)
         ]
+        let trimmedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedLanguage.isEmpty {
+            // Skips mlx_whisper's "detect language from first 30s" step
+            // (~3–5s of model time) when the user has committed to a known
+            // language. Empty string lets mlx_whisper auto-detect as before.
+            args.append(contentsOf: ["--language", trimmedLanguage])
+        }
+        process.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = augmentedPATH
         // When stdout is a pipe (not a TTY), CPython switches to block
