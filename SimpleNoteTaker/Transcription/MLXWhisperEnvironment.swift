@@ -99,6 +99,32 @@ enum MLXWhisperEnvironment {
         return home.appending(path: ".cache/huggingface/hub").appending(path: folder)
     }
 
+    /// Sums the sizes of every blob in the HF cache for this model. The
+    /// snapshot dir contains only symlinks; the real bytes live in `blobs/`,
+    /// so we walk that instead. Returns nil if the model isn't downloaded.
+    static func modelDiskSize(_ name: String, fileManager: FileManager = .default) -> Int64? {
+        let blobsDir = modelCacheURL(name).appending(path: "blobs")
+        guard fileManager.fileExists(atPath: blobsDir.path(percentEncoded: false)),
+              let enumerator = fileManager.enumerator(
+                at: blobsDir,
+                includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]
+              ) else {
+            return nil
+        }
+        var totalSize: Int64 = 0
+        var foundAny = false
+        for case let url as URL in enumerator {
+            guard
+                let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]),
+                values.isRegularFile == true,
+                let size = values.totalFileAllocatedSize
+            else { continue }
+            totalSize += Int64(size)
+            foundAny = true
+        }
+        return foundAny ? totalSize : nil
+    }
+
     /// Generates a 0.5s silent .m4a in tmp, runs mlx-whisper on it (which forces
     /// the model to download if not cached), then deletes the silent file and
     /// any output JSON. Throws if mlx-whisper isn't installed or returns non-zero.

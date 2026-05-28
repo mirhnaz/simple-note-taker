@@ -21,6 +21,17 @@ struct OllamaModel: Decodable, Hashable, Sendable {
     let name: String
 }
 
+struct OllamaPullProgress: Sendable {
+    let status: String
+    let completedBytes: Int?
+    let totalBytes: Int?
+
+    var fraction: Double? {
+        guard let completedBytes, let totalBytes, totalBytes > 0 else { return nil }
+        return min(1.0, max(0.0, Double(completedBytes) / Double(totalBytes)))
+    }
+}
+
 private struct ModelsListResponse: Decodable {
     let models: [OllamaModel]
 }
@@ -93,12 +104,12 @@ struct OllamaClient: Sendable {
         return content
     }
 
-    /// Pulls a model via /api/pull and streams the progress lines. `onStatus`
-    /// fires for each NDJSON status update; it runs on the main actor so the
-    /// caller can drive a SwiftUI label without bouncing through Task hops.
+    /// Pulls a model via /api/pull and streams progress updates. `onProgress`
+    /// fires for each NDJSON status line and runs on the main actor so the
+    /// caller can drive a SwiftUI ProgressView without bouncing through Task hops.
     func pullModel(
         _ name: String,
-        onStatus: @escaping @MainActor @Sendable (String) async -> Void
+        onProgress: @escaping @MainActor @Sendable (OllamaPullProgress) async -> Void
     ) async throws {
         let url = baseURL.appending(path: "/api/pull")
         var request = URLRequest(url: url)
@@ -119,19 +130,13 @@ struct OllamaClient: Sendable {
                 throw OllamaClientError.badResponse(status: 0, body: err)
             }
             let status = (dict["status"] as? String) ?? ""
-            let message: String
-            if let completed = dict["completed"] as? Int,
-               let total = dict["total"] as? Int,
-               total > 0 {
-                let totalMB = total / 1_000_000
-                let doneMB = completed / 1_000_000
-                message = "\(status) — \(doneMB) / \(totalMB) MB"
-            } else {
-                message = status
-            }
-            if !message.isEmpty {
-                await onStatus(message)
-            }
+            guard !status.isEmpty else { continue }
+            let progress = OllamaPullProgress(
+                status: status,
+                completedBytes: dict["completed"] as? Int,
+                totalBytes: dict["total"] as? Int
+            )
+            await onProgress(progress)
         }
     }
 

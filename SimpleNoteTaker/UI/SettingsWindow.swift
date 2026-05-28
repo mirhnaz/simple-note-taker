@@ -25,6 +25,114 @@ enum SettingsTab: Hashable {
     case general
 }
 
+struct StatusChip: View {
+    let label: String
+    let isOK: Bool
+    var detail: String? = nil
+
+    private var tone: Color { isOK ? .green : .orange }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: isOK ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(tone)
+            Text(label)
+                .font(.caption)
+                .fontWeight(.medium)
+            if let detail, !detail.isEmpty {
+                Text("· \(detail)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(tone.opacity(0.12))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(tone.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+@ViewBuilder
+fileprivate func helpRow(text: String, copyValue: String, copyLabel: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        Button(copyLabel) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(copyValue, forType: .string)
+        }
+        .controlSize(.small)
+    }
+}
+
+struct StatusPill: View {
+    enum Tone {
+        case ready
+        case action
+        case warning
+
+        var color: Color {
+            switch self {
+            case .ready: return .green
+            case .action: return .accentColor
+            case .warning: return .orange
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .ready: return "checkmark.circle.fill"
+            case .action: return "arrow.down.circle.fill"
+            case .warning: return "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    let tone: Tone
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: tone.icon)
+                .foregroundStyle(tone.color)
+                .font(.title3)
+                .imageScale(.large)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(tone.color.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(tone.color.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
 struct SettingsWindow: View {
     @State private var selection: SettingsTab = .transcription
 
@@ -54,7 +162,7 @@ private struct TranscriptionSettingsTab: View {
     @AppStorage(SettingsKeys.mlxWhisperPath) private var mlxWhisperPath: String = ""
 
     @State private var mlxInstallPath: URL?
-    @State private var mlxCachedPresets: Set<String> = []
+    @State private var mlxCachedSizes: [String: Int64] = [:]
     @State private var mlxFFmpegInstalled = false
     @State private var mlxDownloadStatus: String?
     @State private var mlxDownloadingModel: String?
@@ -67,6 +175,10 @@ private struct TranscriptionSettingsTab: View {
 
     var body: some View {
         Form {
+            Section {
+                statusPill
+            }
+
             Section {
                 Picker("Provider", selection: $transcriptionProviderRaw) {
                     ForEach(TranscriptionProvider.allCases) { provider in
@@ -97,12 +209,71 @@ private struct TranscriptionSettingsTab: View {
             refreshMLXStatus()
             if !newValue.isEmpty,
                mlxInstallPath != nil,
-               !mlxCachedPresets.contains(newValue),
+               !isMLXModelCached(newValue),
                mlxDownloadingModel == nil {
                 Task { await downloadMLXModel(newValue) }
             }
         }
         .onChange(of: mlxWhisperPath) { _, _ in refreshMLXStatus() }
+    }
+
+    private var statusPill: some View {
+        switch transcriptionProviderRaw {
+        case TranscriptionProvider.apple.rawValue:
+            return StatusPill(
+                tone: .ready,
+                title: "Apple SpeechAnalyzer",
+                detail: "Built-in, no setup required."
+            )
+        case TranscriptionProvider.mlxWhisper.rawValue:
+            let modelDisplay = mlxModelDisplayName(mlxWhisperModel)
+            if mlxInstallPath == nil {
+                return StatusPill(
+                    tone: .warning,
+                    title: "MLX Whisper · \(modelDisplay)",
+                    detail: "mlx_whisper isn't installed. Run `pip install mlx-whisper`."
+                )
+            }
+            if !mlxFFmpegInstalled {
+                return StatusPill(
+                    tone: .warning,
+                    title: "MLX Whisper · \(modelDisplay)",
+                    detail: "ffmpeg is missing. Run `brew install ffmpeg`."
+                )
+            }
+            if mlxDownloadingModel != nil {
+                return StatusPill(
+                    tone: .action,
+                    title: "MLX Whisper · \(modelDisplay)",
+                    detail: mlxDownloadStatus ?? "Downloading model…"
+                )
+            }
+            if !isMLXModelCached(mlxWhisperModel) {
+                return StatusPill(
+                    tone: .action,
+                    title: "MLX Whisper · \(modelDisplay)",
+                    detail: "Model isn't cached. Select it again to download."
+                )
+            }
+            return StatusPill(
+                tone: .ready,
+                title: "MLX Whisper · \(modelDisplay)",
+                detail: "Ready · model cached locally."
+            )
+        default:
+            return StatusPill(
+                tone: .warning,
+                title: "Unknown provider",
+                detail: "Pick a transcription provider below."
+            )
+        }
+    }
+
+    private func mlxModelDisplayName(_ modelID: String) -> String {
+        if let preset = Self.mlxWhisperPresets.first(where: { $0.modelID == modelID }) {
+            return preset.displayName
+        }
+        return modelID
     }
 
     @ViewBuilder
@@ -114,7 +285,8 @@ private struct TranscriptionSettingsTab: View {
                        !mlxWhisperModel.isEmpty {
                         modelRow(
                             label: "\(mlxWhisperModel) (custom)",
-                            isReady: mlxCachedPresets.contains(mlxWhisperModel)
+                            isReady: isMLXModelCached(mlxWhisperModel),
+                            trailing: mlxCachedSizes[mlxWhisperModel].map { formatBytes($0) }
                         )
                         .tag(mlxWhisperModel)
                         Divider()
@@ -122,7 +294,8 @@ private struct TranscriptionSettingsTab: View {
                     ForEach(Self.mlxWhisperPresets) { preset in
                         modelRow(
                             label: preset.menuLabel,
-                            isReady: mlxCachedPresets.contains(preset.modelID)
+                            isReady: isMLXModelCached(preset.modelID),
+                            trailing: mlxCachedSizes[preset.modelID].map { formatBytes($0) }
                         )
                         .tag(preset.modelID)
                     }
@@ -134,49 +307,45 @@ private struct TranscriptionSettingsTab: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                if let path = mlxInstallPath {
-                    Label("Detected at \(path.path(percentEncoded: false))", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else {
-                    Label("Not installed", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Spacer()
-                    Button("Copy install command") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("pip install mlx-whisper", forType: .string)
-                    }
+                StatusChip(label: "mlx_whisper", isOK: mlxInstallPath != nil)
+                StatusChip(label: "ffmpeg", isOK: mlxFFmpegInstalled)
+                StatusChip(
+                    label: "Model",
+                    isOK: isMLXModelCached(mlxWhisperModel),
+                    detail: mlxCachedSizes[mlxWhisperModel].map { formatBytes($0) }
+                )
+                Spacer()
+                Button {
+                    refreshMLXStatus()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
+                .help("Re-check installation and cache")
             }
+
             if mlxInstallPath == nil {
-                Text("Run this in Terminal, then click Refresh:\n  pip install mlx-whisper")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                helpRow(
+                    text: "mlx_whisper isn't on PATH. Run `pip install mlx-whisper` in Terminal, then click Refresh.",
+                    copyValue: "pip install mlx-whisper",
+                    copyLabel: "Copy install command"
+                )
+            }
+            if !mlxFFmpegInstalled {
+                helpRow(
+                    text: "ffmpeg is required by mlx_whisper. Run `brew install ffmpeg` in Terminal.",
+                    copyValue: "brew install ffmpeg",
+                    copyLabel: "Copy"
+                )
             }
 
             HStack(spacing: 8) {
-                if mlxFFmpegInstalled {
-                    Label("ffmpeg installed", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Label("ffmpeg missing — brew install ffmpeg", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Spacer()
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("brew install ffmpeg", forType: .string)
+                if isMLXModelCached(mlxWhisperModel) {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([MLXWhisperEnvironment.modelCacheURL(mlxWhisperModel)])
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
                     }
-                }
-            }
-
-            HStack(spacing: 8) {
-                if mlxCachedPresets.contains(mlxWhisperModel) {
-                    Label("Model cached", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Label("Model not cached", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                    .help("Reveal HF cache in Finder")
                 }
                 Spacer()
                 Button {
@@ -188,17 +357,17 @@ private struct TranscriptionSettingsTab: View {
                             Text("Downloading…")
                         }
                     } else {
-                        Text(mlxCachedPresets.contains(mlxWhisperModel) ? "Re-warm" : "Download model")
+                        Text(isMLXModelCached(mlxWhisperModel) ? "Re-warm" : "Download model")
                     }
                 }
                 .disabled(mlxDownloadingModel != nil || mlxInstallPath == nil)
+            }
 
-                Button {
-                    refreshMLXStatus()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("Re-check installation and cache")
+            if !mlxCachedSizes.isEmpty {
+                let total = mlxCachedSizes.values.reduce(0, +)
+                Text("Total MLX Whisper cache: \(formatBytes(total)) across \(mlxCachedSizes.count) model\(mlxCachedSizes.count == 1 ? "" : "s").")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             if let mlxDownloadStatus {
                 Text(mlxDownloadStatus).font(.caption).foregroundStyle(.secondary)
@@ -217,20 +386,23 @@ private struct TranscriptionSettingsTab: View {
         }
     }
 
+    private func isMLXModelCached(_ modelID: String) -> Bool {
+        mlxCachedSizes[modelID] != nil
+    }
+
     private func refreshMLXStatus() {
         mlxInstallPath = MLXWhisperEnvironment.detectInstallation(overridePath: mlxWhisperPath)
-        var cached: Set<String> = []
-        for preset in Self.mlxWhisperPresets {
-            if MLXWhisperEnvironment.isModelCached(preset.modelID) {
-                cached.insert(preset.modelID)
+        var sizes: [String: Int64] = [:]
+        var idsToCheck = Self.mlxWhisperPresets.map { $0.modelID }
+        if !mlxWhisperModel.isEmpty, !idsToCheck.contains(mlxWhisperModel) {
+            idsToCheck.append(mlxWhisperModel)
+        }
+        for modelID in idsToCheck {
+            if let size = MLXWhisperEnvironment.modelDiskSize(modelID) {
+                sizes[modelID] = size
             }
         }
-        if !mlxWhisperModel.isEmpty,
-           !Self.mlxWhisperPresets.contains(where: { $0.modelID == mlxWhisperModel }),
-           MLXWhisperEnvironment.isModelCached(mlxWhisperModel) {
-            cached.insert(mlxWhisperModel)
-        }
-        mlxCachedPresets = cached
+        mlxCachedSizes = sizes
         mlxFFmpegInstalled = MLXWhisperEnvironment.isFFmpegInstalled()
     }
 
@@ -269,7 +441,11 @@ private struct SummarizationSettingsTab: View {
     @State private var ollamaReachable = false
     @State private var pullingModelTag: String?
     @State private var ollamaPullStatus: String?
+    @State private var ollamaPullFraction: Double?
+    @State private var ollamaPullCompletedBytes: Int?
+    @State private var ollamaPullTotalBytes: Int?
     @State private var ollamaPullError: String?
+    @State private var appleUnavailableMessage: String?
 
     static let suggestedOllamaModels: [OllamaSuggestedModel] = [
         .init(tag: "llama3.3:70b", label: "Llama 3.3 70B", qualityHint: "accuracy"),
@@ -280,10 +456,18 @@ private struct SummarizationSettingsTab: View {
     var body: some View {
         Form {
             Section {
+                statusPill
+            }
+
+            Section {
                 Picker("Provider", selection: $llmProviderRaw) {
                     ForEach(LLMProvider.allCases) { provider in
                         Text(provider.displayName).tag(provider.rawValue)
                     }
+                }
+
+                if llmProviderRaw == LLMProvider.apple.rawValue {
+                    appleStatusRow
                 }
             }
 
@@ -293,11 +477,15 @@ private struct SummarizationSettingsTab: View {
         }
         .formStyle(.grouped)
         .onAppear {
+            refreshAppleAvailability()
             if llmProviderRaw == LLMProvider.ollama.rawValue {
                 Task { await refreshModels() }
             }
         }
         .onChange(of: llmProviderRaw) { _, newValue in
+            if newValue == LLMProvider.apple.rawValue {
+                refreshAppleAvailability()
+            }
             if newValue == LLMProvider.ollama.rawValue {
                 Task { await refreshModels() }
             }
@@ -307,6 +495,105 @@ private struct SummarizationSettingsTab: View {
                 Task { await refreshModels() }
             }
         }
+    }
+
+    private var statusPill: some View {
+        switch llmProviderRaw {
+        case LLMProvider.apple.rawValue:
+            if let msg = appleUnavailableMessage {
+                return StatusPill(
+                    tone: .warning,
+                    title: "Apple Foundation Models",
+                    detail: msg
+                )
+            }
+            return StatusPill(
+                tone: .ready,
+                title: "Apple Foundation Models",
+                detail: "Ready · runs on-device."
+            )
+        case LLMProvider.ollama.rawValue:
+            if !ollamaReachable {
+                return StatusPill(
+                    tone: .warning,
+                    title: "Ollama",
+                    detail: "Not reachable at \(ollamaBaseURL)."
+                )
+            }
+            if let tag = pullingModelTag {
+                return StatusPill(
+                    tone: .action,
+                    title: "Ollama · \(tag)",
+                    detail: ollamaPullStatus ?? "Pulling model…"
+                )
+            }
+            if ollamaModel.isEmpty {
+                return StatusPill(
+                    tone: .warning,
+                    title: "Ollama",
+                    detail: "Pick a model to enable summarization."
+                )
+            }
+            if !availableModels.contains(ollamaModel) {
+                return StatusPill(
+                    tone: .action,
+                    title: "Ollama · \(ollamaModel)",
+                    detail: "Model isn't pulled yet."
+                )
+            }
+            return StatusPill(
+                tone: .ready,
+                title: "Ollama · \(ollamaModel)",
+                detail: "Ready · running at \(ollamaBaseURL)."
+            )
+        default:
+            return StatusPill(
+                tone: .warning,
+                title: "Unknown provider",
+                detail: "Pick a summarization provider below."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var appleStatusRow: some View {
+        if let msg = appleUnavailableMessage {
+            HStack(spacing: 8) {
+                Label(msg, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Open Apple Intelligence") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.intelligence") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                Button {
+                    refreshAppleAvailability()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Re-check Apple Intelligence availability")
+            }
+        } else {
+            HStack(spacing: 8) {
+                Label("Available — runs on-device, no download required.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+                Spacer()
+                Button {
+                    refreshAppleAvailability()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Re-check Apple Intelligence availability")
+            }
+        }
+    }
+
+    private func refreshAppleAvailability() {
+        appleUnavailableMessage = FoundationModelsAvailability.currentMessage()
     }
 
     @ViewBuilder
@@ -397,28 +684,57 @@ private struct SummarizationSettingsTab: View {
 
     @ViewBuilder
     private var pullCurrentModelRow: some View {
-        HStack(spacing: 8) {
-            Label("Not pulled locally yet.", systemImage: "exclamationmark.triangle.fill")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Label(
+                    pullingModelTag == ollamaModel ? "Pulling \(ollamaModel)…" : "Not pulled locally yet.",
+                    systemImage: pullingModelTag == ollamaModel ? "arrow.down.circle.fill" : "exclamationmark.triangle.fill"
+                )
                 .font(.caption)
-                .foregroundStyle(.orange)
-            Spacer()
-            Button {
-                Task { await pullOllamaModel(ollamaModel) }
-            } label: {
-                if pullingModelTag == ollamaModel {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.small)
-                        Text(ollamaPullStatus ?? "Pulling…")
-                    }
-                } else {
+                .foregroundStyle(pullingModelTag == ollamaModel ? Color.accentColor : Color.orange)
+                Spacer()
+                Button {
+                    Task { await pullOllamaModel(ollamaModel) }
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.down.circle")
                         Text("Pull \(ollamaModel)")
                     }
                 }
+                .disabled(pullingModelTag != nil)
             }
-            .disabled(pullingModelTag != nil)
+            if pullingModelTag == ollamaModel {
+                pullProgressView
+            }
         }
+    }
+
+    @ViewBuilder
+    private var pullProgressView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let fraction = ollamaPullFraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+            HStack {
+                Text(ollamaPullStatus ?? "Working…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(pullByteLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var pullByteLabel: String {
+        guard let total = ollamaPullTotalBytes, total > 0 else { return "" }
+        let completed = ollamaPullCompletedBytes ?? 0
+        return "\(formatBytes(Int64(completed))) / \(formatBytes(Int64(total)))"
     }
 
     @ViewBuilder
@@ -481,13 +797,22 @@ private struct SummarizationSettingsTab: View {
         pullingModelTag = tag
         ollamaPullError = nil
         ollamaPullStatus = "Starting…"
+        ollamaPullFraction = nil
+        ollamaPullCompletedBytes = nil
+        ollamaPullTotalBytes = nil
         defer {
             pullingModelTag = nil
             ollamaPullStatus = nil
+            ollamaPullFraction = nil
+            ollamaPullCompletedBytes = nil
+            ollamaPullTotalBytes = nil
         }
         do {
-            try await OllamaClient(baseURL: url).pullModel(tag) { status in
-                ollamaPullStatus = status
+            try await OllamaClient(baseURL: url).pullModel(tag) { progress in
+                ollamaPullStatus = progress.status
+                ollamaPullFraction = progress.fraction
+                ollamaPullCompletedBytes = progress.completedBytes
+                ollamaPullTotalBytes = progress.totalBytes
             }
             await refreshModels()
             ollamaModel = tag
@@ -538,13 +863,24 @@ private struct GeneralSettingsTab: View {
 // MARK: - Shared row helpers
 
 @ViewBuilder
-fileprivate func modelRow(label: String, isReady: Bool) -> some View {
+fileprivate func modelRow(label: String, isReady: Bool, trailing: String? = nil) -> some View {
     Label {
-        Text(label)
+        if let trailing, !trailing.isEmpty {
+            Text("\(label)  ·  \(trailing)")
+        } else {
+            Text(label)
+        }
     } icon: {
         Image(systemName: isReady ? "checkmark.circle.fill" : "arrow.down.circle.fill")
             .foregroundStyle(isReady ? Color.green : Color.accentColor)
     }
+}
+
+fileprivate func formatBytes(_ bytes: Int64) -> String {
+    let formatter = ByteCountFormatter()
+    formatter.allowedUnits = [.useMB, .useGB]
+    formatter.countStyle = .file
+    return formatter.string(fromByteCount: bytes)
 }
 
 @ViewBuilder
