@@ -71,17 +71,14 @@ struct RecordingTabView: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(.red.opacity(0.10)))
         case .transcribing:
+            // Status hint only. The progress bar + percentage + cancel button
+            // live in the floating control at the bottom of the tab — Apple
+            // HIG calls out a single progress indicator per task, so the pill
+            // mirrors the .starting style (spinner + label) without echoing
+            // the same fraction.
             HStack(spacing: 5) {
-                if let fraction = controller.importPhase?.transcriptionFraction {
-                    ProgressView(value: fraction)
-                        .progressViewStyle(.linear)
-                        .controlSize(.mini)
-                        .frame(width: 80)
-                } else {
-                    ProgressView().controlSize(.mini)
-                }
-                Text(controller.importPhase?.label ?? "Processing")
-                    .font(.caption).foregroundStyle(.secondary)
+                ProgressView().controlSize(.mini)
+                Text("Transcribing").font(.caption).foregroundStyle(.secondary)
             }
         case .starting:
             HStack(spacing: 5) {
