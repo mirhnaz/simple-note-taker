@@ -81,6 +81,7 @@ enum AudioNormalization {
         process.standardError = stderr
         process.standardOutput = Pipe()
 
+        SubprocessRegistry.shared.track(process)
         try await Task.detached(priority: .userInitiated) {
             try process.run()
             process.waitUntilExit()

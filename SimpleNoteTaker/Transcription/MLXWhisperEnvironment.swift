@@ -250,6 +250,7 @@ enum MLXWhisperEnvironment {
         async let stdoutDrain: Void = drain(handle: stdout.fileHandleForReading, into: stdoutAccumulator)
         async let stderrDrain: Void = drain(handle: stderr.fileHandleForReading, into: stderrAccumulator)
 
+        SubprocessRegistry.shared.track(process)
         try await Task.detached(priority: .userInitiated) {
             try process.run()
             process.waitUntilExit()
