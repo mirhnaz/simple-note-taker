@@ -291,6 +291,14 @@ enum MLXWhisperEnvironment {
         SubprocessRegistry.shared.track(process)
         try await Task.detached(priority: .userInitiated) {
             try process.run()
+            // The Pipe holds both file-descriptor ends; the child dup'd its
+            // own copies during posix_spawn, so we can safely close ours.
+            // Without this, our parent-side write FDs stay open and the read
+            // end never sees EOF after the child exits — FileHandle.bytes.lines
+            // hangs forever, the drain awaits never resolve, and the import
+            // gets stuck at the wall-clock ticker's 99% cap with the GPU idle.
+            try? stdout.fileHandleForWriting.close()
+            try? stderr.fileHandleForWriting.close()
             process.waitUntilExit()
         }.value
 
