@@ -502,10 +502,15 @@ private struct SummarizationSettingsTab: View {
     @State private var ollamaPullError: String?
     @State private var appleUnavailableMessage: String?
 
+    // Ordered by recommendation for long-meeting summarization on Apple
+    // Silicon with 16-64GB unified memory. All three have native context
+    // windows large enough to ingest a multi-hour transcript in one pass,
+    // avoiding the map-reduce quality loss that Apple FM's ~4K ceiling
+    // would force.
     static let suggestedOllamaModels: [OllamaSuggestedModel] = [
-        .init(tag: "llama3.3:70b", label: "Llama 3.3 70B", qualityHint: "accuracy"),
-        .init(tag: "qwen2.5:32b", label: "Qwen 2.5 32B", qualityHint: "balanced"),
-        .init(tag: "llama3.1:8b", label: "Llama 3.1 8B", qualityHint: "performance")
+        .init(tag: "llama3.1:8b", label: "Llama 3.1 8B", qualityHint: "recommended · 128K context"),
+        .init(tag: "qwen2.5:14b", label: "Qwen 2.5 14B", qualityHint: "balanced · 32K context"),
+        .init(tag: "qwen2.5:32b", label: "Qwen 2.5 32B", qualityHint: "highest accuracy · 32K context")
     ]
 
     var body: some View {
@@ -523,6 +528,10 @@ private struct SummarizationSettingsTab: View {
 
                 if llmProviderRaw == LLMProvider.apple.rawValue {
                     appleStatusRow
+                    Text("Apple Foundation Models is on-device with a ~4K-token context. Meetings longer than ~10 minutes can overflow it — switch to Ollama with a large-context model (e.g. Llama 3.1 8B at 128K) for full-length summarization.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
