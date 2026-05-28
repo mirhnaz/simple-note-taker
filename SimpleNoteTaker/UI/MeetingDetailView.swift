@@ -273,7 +273,11 @@ struct MeetingDetailView: View {
                 lastError = "Pick an Ollama model in Settings first."
                 return
             }
-            summarizer = OllamaSummarizer(baseURL: AppSettings.shared.ollamaBaseURL, model: modelName)
+            summarizer = OllamaSummarizer(
+                baseURL: AppSettings.shared.ollamaBaseURL,
+                model: modelName,
+                temperature: AppSettings.shared.ollamaTemperature
+            )
         }
 
         let newSummary = await summarizer.summarize(transcript: transcriptText)

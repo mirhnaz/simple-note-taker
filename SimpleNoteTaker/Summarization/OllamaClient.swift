@@ -54,7 +54,14 @@ struct OllamaClient: Sendable {
 
     /// Sends a /api/chat request and returns the assistant's `content` string.
     /// `format` is sent as the structured-output JSON Schema; pass nil to skip.
-    func chat(model: String, messages: [OllamaChatMessage], format: [String: Any]? = nil) async throws -> String {
+    /// `temperature` is forwarded as `options.temperature`; pass nil to leave it
+    /// at the model's server-side default.
+    func chat(
+        model: String,
+        messages: [OllamaChatMessage],
+        format: [String: Any]? = nil,
+        temperature: Double? = nil
+    ) async throws -> String {
         let url = baseURL.appending(path: "/api/chat")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -67,6 +74,9 @@ struct OllamaClient: Sendable {
         ]
         if let format {
             payload["format"] = format
+        }
+        if let temperature {
+            payload["options"] = ["temperature": temperature]
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 

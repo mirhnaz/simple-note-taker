@@ -20,11 +20,13 @@ private let meetingSummarySchema: [String: Any] = [
 struct OllamaSummarizer: Summarizing {
     let baseURL: URL
     let model: String
+    let temperature: Double?
     let session: URLSession
 
-    init(baseURL: URL, model: String, session: URLSession = .shared) {
+    init(baseURL: URL, model: String, temperature: Double? = nil, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.model = model
+        self.temperature = temperature
         self.session = session
     }
 
@@ -42,7 +44,12 @@ struct OllamaSummarizer: Summarizing {
             .init(role: "user", content: SummarizationGuidelines.userPrompt(transcript: trimmed))
         ]
         do {
-            let raw = try await client.chat(model: model, messages: messages, format: meetingSummarySchema)
+            let raw = try await client.chat(
+                model: model,
+                messages: messages,
+                format: meetingSummarySchema,
+                temperature: temperature
+            )
             return try Self.decode(rawJSON: raw)
         } catch {
             log.error("ollama summarization failed: \(error.localizedDescription, privacy: .public)")

@@ -7,6 +7,7 @@ enum SettingsKeys {
     static let llmProvider = "llmProvider"
     static let ollamaBaseURL = "ollamaBaseURL"
     static let ollamaModel = "ollamaModel"
+    static let ollamaTemperature = "ollamaTemperature"
     static let transcriptionProvider = "transcriptionProvider"
     static let mlxWhisperModel = "mlxWhisperModel"
     static let mlxWhisperPath = "mlxWhisperPath"
@@ -46,6 +47,7 @@ struct AppSettings {
     nonisolated static let shared = AppSettings(defaults: .standard)
 
     static let defaultOllamaBaseURL = "http://localhost:11434"
+    static let defaultOllamaTemperature: Double = 0.2
     static let defaultMLXWhisperModel = "mlx-community/whisper-large-v3-turbo"
 
     var notesDirectory: URL {
@@ -77,6 +79,13 @@ struct AppSettings {
         defaults.string(forKey: SettingsKeys.ollamaModel) ?? ""
     }
 
+    var ollamaTemperature: Double {
+        if defaults.object(forKey: SettingsKeys.ollamaTemperature) == nil {
+            return Self.defaultOllamaTemperature
+        }
+        return defaults.double(forKey: SettingsKeys.ollamaTemperature)
+    }
+
     var transcriptionProvider: TranscriptionProvider {
         let raw = defaults.string(forKey: SettingsKeys.transcriptionProvider) ?? ""
         return TranscriptionProvider(rawValue: raw) ?? .apple
@@ -96,7 +105,7 @@ struct AppSettings {
         case .apple:
             return FoundationModelsSummarizer()
         case .ollama:
-            return OllamaSummarizer(baseURL: ollamaBaseURL, model: ollamaModel)
+            return OllamaSummarizer(baseURL: ollamaBaseURL, model: ollamaModel, temperature: ollamaTemperature)
         }
     }
 
