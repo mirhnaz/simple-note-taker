@@ -19,7 +19,6 @@ struct RecordingTabView: View {
             recordingControl
                 .padding(.bottom, 24)
         }
-        .task { await controller.refreshSummarizerStatus() }
         .sheet(item: $pendingImport) { item in
             ImportConfirmationSheet(
                 fileName: item.url.lastPathComponent,

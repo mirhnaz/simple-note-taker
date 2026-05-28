@@ -35,6 +35,16 @@ struct MainWindow: View {
     @Bindable private var controller = RecordingController.shared
     @Environment(\.openSettings) private var openSettings
 
+    // Observed so the banner re-probes whenever Settings changes any
+    // summarization-relevant value (provider, Ollama URL, model).
+    @AppStorage(SettingsKeys.llmProvider) private var llmProviderRaw: String = LLMProvider.apple.rawValue
+    @AppStorage(SettingsKeys.ollamaBaseURL) private var ollamaBaseURL: String = AppSettings.defaultOllamaBaseURL
+    @AppStorage(SettingsKeys.ollamaModel) private var ollamaModel: String = ""
+
+    private var summarizerSettingsFingerprint: String {
+        "\(llmProviderRaw)|\(ollamaBaseURL)|\(ollamaModel)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             setupBanner
@@ -47,6 +57,9 @@ struct MainWindow: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .background(Color.appWindowBackground)
+        .task(id: summarizerSettingsFingerprint) {
+            await controller.refreshSummarizerStatus()
+        }
         .onAppear {
             startupLog.info("main window onAppear")
             AppActivation.shared.windowDidAppear()

@@ -594,6 +594,9 @@ private struct SummarizationSettingsTab: View {
 
     private func refreshAppleAvailability() {
         appleUnavailableMessage = FoundationModelsAvailability.currentMessage()
+        // User may have toggled Apple Intelligence outside the app — push the
+        // banner's status through even if no UserDefaults key changed.
+        Task { await RecordingController.shared.refreshSummarizerStatus() }
     }
 
     @ViewBuilder
@@ -816,6 +819,10 @@ private struct SummarizationSettingsTab: View {
             }
             await refreshModels()
             ollamaModel = tag
+            // Covers the case where the just-pulled tag equals the already-
+            // selected model: no @AppStorage change fires, so the banner's
+            // .task(id:) wouldn't re-probe on its own.
+            await RecordingController.shared.refreshSummarizerStatus()
         } catch {
             ollamaPullError = "Pull failed: \(error.localizedDescription)"
         }
