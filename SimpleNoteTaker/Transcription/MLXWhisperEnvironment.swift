@@ -222,6 +222,12 @@ enum MLXWhisperEnvironment {
         ]
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = augmentedPATH
+        // When stdout is a pipe (not a TTY), CPython switches to block
+        // buffering, so mlx_whisper's per-segment "[HH:MM:SS.mmm --> ...]"
+        // prints sit in an ~8KB buffer until enough have accumulated. That
+        // makes our live-progress drain useless. PYTHONUNBUFFERED=1 forces a
+        // flush on every print so the UI updates segment-by-segment.
+        env["PYTHONUNBUFFERED"] = "1"
         process.environment = env
         // Keep the subprocess on performance cores. Without this it inherits
         // the parent Task's QoS (typically .utility under Swift concurrency),
