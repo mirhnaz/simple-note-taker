@@ -913,9 +913,23 @@ fileprivate func modelRow(label: String, isReady: Bool, trailing: String? = nil)
             Text(label)
         }
     } icon: {
-        Image(systemName: isReady ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-            .foregroundStyle(isReady ? Color.green : Color.accentColor)
+        // Picker on macOS renders these in NSMenu, which strips
+        // .foregroundStyle from SF Symbol images and re-tints them as
+        // templates. Pre-rendering as an NSImage with palette colors baked
+        // in (and isTemplate = false) preserves the green/accent tint.
+        coloredSFSymbol(
+            isReady ? "checkmark.circle.fill" : "arrow.down.circle.fill",
+            color: isReady ? .systemGreen : .controlAccentColor
+        )
     }
+}
+
+fileprivate func coloredSFSymbol(_ name: String, color: NSColor) -> Image {
+    let base = NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage()
+    let cfg = NSImage.SymbolConfiguration(paletteColors: [color])
+    let result = base.withSymbolConfiguration(cfg) ?? base
+    result.isTemplate = false
+    return Image(nsImage: result)
 }
 
 fileprivate func formatBytes(_ bytes: Int64) -> String {
