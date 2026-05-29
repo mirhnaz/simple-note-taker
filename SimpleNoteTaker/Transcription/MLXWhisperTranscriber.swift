@@ -58,7 +58,7 @@ struct MLXWhisperTranscriber: FileTranscribing {
     /// "no segments key, only text" minimal shape (single segment from 0..duration).
     static func parseSegments(jsonData: Data, kind: AudioKind) throws -> [TranscriptSegment] {
         do {
-            let payload = try JSONDecoder().decode(WhisperOutput.self, from: jsonData)
+            let payload = try JSONDecoder().decode(WhisperOutput.self, from: sanitizeNonFiniteJSON(jsonData))
             if let segments = payload.segments, !segments.isEmpty {
                 return segments.map { seg in
                     TranscriptSegment(
@@ -76,6 +76,59 @@ struct MLXWhisperTranscriber: FileTranscribing {
         } catch {
             throw MLXWhisperError.decodingFailed(underlying: error)
         }
+    }
+
+    /// Python's `json.dump` (which mlx_whisper uses with the default
+    /// `allow_nan=True`) emits bare `NaN`, `Infinity`, and `-Infinity` literals
+    /// for non-finite floats — e.g. a segment's `compression_ratio` or
+    /// `avg_logprob`. Those tokens are illegal in strict JSON, so Foundation's
+    /// JSONDecoder rejects the entire document. Replace them with `0` (we don't
+    /// use those metadata fields). The scan is quote-aware so the substitution
+    /// never touches transcript text that happens to contain the words.
+    static func sanitizeNonFiniteJSON(_ data: Data) -> Data {
+        let bytes = [UInt8](data)
+        let n = bytes.count
+        let quote = UInt8(ascii: "\"")
+        let backslash = UInt8(ascii: "\\")
+        let zero = UInt8(ascii: "0")
+        let tokens: [[UInt8]] = [Array("-Infinity".utf8), Array("Infinity".utf8), Array("NaN".utf8)]
+
+        func matches(at i: Int, _ token: [UInt8]) -> Bool {
+            guard i + token.count <= n else { return false }
+            for k in 0..<token.count where bytes[i + k] != token[k] { return false }
+            return true
+        }
+
+        var out = [UInt8]()
+        out.reserveCapacity(n)
+        var inString = false
+        var escaped = false
+        var i = 0
+        while i < n {
+            let b = bytes[i]
+            if inString {
+                out.append(b)
+                if escaped { escaped = false }
+                else if b == backslash { escaped = true }
+                else if b == quote { inString = false }
+                i += 1
+                continue
+            }
+            if b == quote {
+                inString = true
+                out.append(b)
+                i += 1
+                continue
+            }
+            if let token = tokens.first(where: { matches(at: i, $0) }) {
+                out.append(zero)
+                i += token.count
+                continue
+            }
+            out.append(b)
+            i += 1
+        }
+        return Data(out)
     }
 
     private struct WhisperOutput: Decodable {

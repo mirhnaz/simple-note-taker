@@ -52,4 +52,23 @@ struct MLXWhisperTranscriberTests {
             // expected
         }
     }
+
+    @Test func parsesJSONWithPythonNonFiniteFloats() throws {
+        // mlx_whisper's json.dump emits bare NaN / Infinity / -Infinity for
+        // non-finite metadata floats, which strict JSON forbids.
+        let json = """
+        {
+          "text": "Hello to Infinity and beyond.",
+          "segments": [
+            {"start": 0.0, "end": 1.5, "text": "Hello to Infinity and beyond.", "compression_ratio": Infinity, "avg_logprob": -Infinity, "no_speech_prob": NaN}
+          ],
+          "language": "en"
+        }
+        """.data(using: .utf8)!
+        let segments = try MLXWhisperTranscriber.parseSegments(jsonData: json, kind: .mic)
+        #expect(segments.count == 1)
+        // Transcript text containing the word "Infinity" must survive intact.
+        #expect(segments[0].text == "Hello to Infinity and beyond.")
+        #expect(segments[0].endSeconds == 1.5)
+    }
 }
