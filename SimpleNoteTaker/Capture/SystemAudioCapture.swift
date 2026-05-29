@@ -27,6 +27,12 @@ final class SystemAudioCapture {
 
     static func start(outputURL: URL, transcriber: LiveTranscriber? = nil) async throws -> SystemAudioCapture {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
+        // Write a movie fragment every few seconds so that if the app crashes
+        // before finishWriting() runs, the file on disk is still a valid,
+        // playable fragmented mp4 up to the last fragment — recoverable on the
+        // next launch. Without this, an unfinalized AVAssetWriter output has no
+        // moov atom and is unreadable.
+        writer.movieFragmentInterval = CMTime(value: 5, timescale: 1)
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 48000,

@@ -12,6 +12,7 @@ A macOS app for recording meetings, transcribing them locally, and summarizing t
 - **Meeting types** (general / interview / standup / 1:1) tailor the summary prompt and are written into each meeting's `reading.md` + `transcript.json` so downstream agents can route on them. Imports pick per-file; live recordings use a default set in Settings.
 - **Per-meeting detail window** with the summary cards. Regenerate dropdown lets you re-run the summary against any installed model without changing your default. Undo to restore the previous version.
 - **Library of past meetings** as cards with title, date, duration, and summary snippet, with **full-text search** across titles, summaries, and the prose transcript.
+- **Crash-safe recording**: an in-progress recording drops a durable marker and the system-audio stream is written as a fragmented mp4, so if the app quits unexpectedly mid-meeting the next launch offers to recover the meeting by transcribing the audio that was saved.
 
 ## Output layout
 

@@ -37,6 +37,9 @@ final class RecordingController {
     private(set) var session: AudioRecorder?
     private(set) var importPhase: ImportPhase?
     private(set) var summarizerStatus: SummarizerStatus = .checking
+    /// Set at launch when a previous recording was interrupted by a crash and
+    /// its audio is still recoverable. Drives the recovery prompt.
+    private(set) var pendingRecovery: RecordingRecovery.Marker?
     private var cancellingImport = false
     private let startSession: () async throws -> AudioRecorder
     private let requestPermissions: () async -> Permissions.Status
@@ -208,5 +211,47 @@ final class RecordingController {
         guard importPhase != nil else { return }
         cancellingImport = true
         SubprocessRegistry.shared.interruptAll()
+    }
+
+    /// Checks at launch whether a previous recording was interrupted by a
+    /// crash and left recoverable audio. Idempotent — safe to call on each
+    /// window appear. Never runs while a recording/import is active.
+    func checkForCrashRecovery() {
+        guard case .idle = state, pendingRecovery == nil else { return }
+        pendingRecovery = RecordingRecovery.pending()
+    }
+
+    /// Rebuilds the interrupted meeting from its surviving audio and clears the
+    /// pending state. Routes the result through the same UI signal as an
+    /// import (lastTranscriptURL).
+    func recoverPendingMeeting() async {
+        guard let marker = pendingRecovery, case .idle = state else { return }
+        pendingRecovery = nil
+        state = .transcribing(startedAt: Date())
+        importPhase = .transcribing(fraction: nil)
+        lastError = nil
+        lastWarning = nil
+        do {
+            let url = try await CrashRecovery.recover(marker: marker)
+            lastTranscriptURL = url
+            applyAppleIntelligenceWarningIfNeeded()
+        } catch {
+            lastError = "Couldn't recover the interrupted meeting: \(error.localizedDescription)"
+        }
+        importPhase = nil
+        state = .idle
+    }
+
+    /// Throws away the interrupted recording's audio and marker.
+    func discardPendingRecovery() {
+        guard let marker = pendingRecovery else { return }
+        pendingRecovery = nil
+        CrashRecovery.discard(marker: marker)
+    }
+
+    /// Dismisses the recovery prompt for this session without touching the
+    /// on-disk marker, so it re-prompts on the next launch.
+    func dismissRecoveryForNow() {
+        pendingRecovery = nil
     }
 }

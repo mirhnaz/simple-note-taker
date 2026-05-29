@@ -11,6 +11,15 @@ enum Paths {
             .appending(path: "Audio_files", directoryHint: .isDirectory)
     }
 
+    /// App-scoped Application Support directory. Durable across crashes and
+    /// reboots — used for the in-progress recording marker so a meeting that
+    /// was interrupted by a crash can be recovered on the next launch.
+    static var applicationSupportDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.mir.SimpleNoteTaker"
+        return base.appending(path: bundleID, directoryHint: .isDirectory)
+    }
+
     @discardableResult
     static func ensureDirectoryExists(_ url: URL) throws -> URL {
         if !FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {

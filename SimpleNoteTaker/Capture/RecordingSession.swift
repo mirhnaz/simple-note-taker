@@ -78,6 +78,16 @@ final class RecordingSession: AudioRecorder {
             warning = [warning, micWarning].compactMap { $0 }.joined(separator: "\n")
         }
 
+        // Mark the recording in progress so a crash before stop() can be
+        // recovered on next launch from the audio already on disk.
+        RecordingRecovery.begin(
+            micURL: micURL,
+            systemURL: files[.system],
+            startedAt: startedAt,
+            meetingType: meetingType,
+            retainAudio: settings.retainAudioFiles
+        )
+
         log.info("session started; mic + \(system == nil ? "no system audio" : "system audio", privacy: .public)")
         return RecordingSession(
             startedAt: startedAt,
@@ -165,6 +175,9 @@ final class RecordingSession: AudioRecorder {
         )
         let url = written.summaryURL
         log.info("wrote summary + transcript: \(written.summaryURL.lastPathComponent, privacy: .public), \(written.transcriptURL.lastPathComponent, privacy: .public)")
+
+        // Clean stop — no crash recovery needed for this meeting.
+        RecordingRecovery.clear()
 
         if !retainAudioFiles {
             cleanupAudioFiles()
