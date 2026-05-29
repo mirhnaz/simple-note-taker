@@ -42,7 +42,16 @@ struct MLXWhisperTranscriber: FileTranscribing {
             onProgress: onProgress
         )
         let data = try Data(contentsOf: jsonURL)
-        return try Self.parseSegments(jsonData: data, kind: kind)
+        do {
+            return try Self.parseSegments(jsonData: data, kind: kind)
+        } catch {
+            // Capture what was actually in the file before defer wipes the
+            // temp dir — without this we get a useless "data isn't the
+            // correct format" with no way to see the JSON.
+            let preview = String(data: data.prefix(500), encoding: .utf8) ?? "(invalid UTF-8)"
+            log.error("mlx_whisper JSON decode failed. file=\(jsonURL.lastPathComponent, privacy: .public) bytes=\(data.count, privacy: .public) preview=\(preview, privacy: .public)")
+            throw error
+        }
     }
 
     /// Parses a Whisper JSON output into `[TranscriptSegment]`. Tolerates the
