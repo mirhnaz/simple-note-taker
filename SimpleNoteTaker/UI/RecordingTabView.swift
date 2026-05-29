@@ -276,7 +276,10 @@ private var idlePlaceholder: some View {
         importLog.info("import selected: \(url.lastPathComponent, privacy: .public)")
         pendingImport = PendingImport(
             url: url,
-            meetingDate: ImportSession.defaultMeetingDate(for: url)
+            // Default the picker to now; the user adjusts if the recording is
+            // from an earlier meeting. (File modification dates are often
+            // unreliable — copied/exported files carry the copy time.)
+            meetingDate: Date()
         )
     }
 
