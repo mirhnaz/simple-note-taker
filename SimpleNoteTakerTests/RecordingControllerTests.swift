@@ -34,6 +34,22 @@ struct RecordingControllerTests {
     static let micDenied = Permissions.Status(microphone: false, speech: true, screenRecording: true)
     static let speechDenied = Permissions.Status(microphone: true, speech: false, screenRecording: true)
 
+    /// Builds a controller whose summarizer probe is stubbed ready and applies
+    /// it, so `start()` gets past the summarizer-availability guard and the
+    /// permission/recording behavior under test is what actually runs.
+    static func makeReadyController(
+        startSession: @escaping () async throws -> AudioRecorder,
+        requestPermissions: @escaping () async -> Permissions.Status
+    ) async -> RecordingController {
+        let controller = RecordingController(
+            startSession: startSession,
+            requestPermissions: requestPermissions,
+            probeSummarizerStatus: { .ready }
+        )
+        await controller.refreshSummarizerStatus()
+        return controller
+    }
+
     @Test func startsInIdleState() {
         let controller = RecordingController(
             startSession: { Issue.record("startSession should not be called"); return StubRecorder() },
@@ -47,7 +63,7 @@ struct RecordingControllerTests {
 
     @Test func startTransitionsToRecordingWhenAllPermissionsGranted() async {
         let recorder = StubRecorder(startedAt: Date(timeIntervalSince1970: 1_000_000))
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { recorder },
             requestPermissions: { Self.allGranted }
         )
@@ -58,7 +74,7 @@ struct RecordingControllerTests {
     }
 
     @Test func startSetsErrorWhenMicrophoneDenied() async {
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { Issue.record("startSession should not be called"); return StubRecorder() },
             requestPermissions: { Self.micDenied }
         )
@@ -68,7 +84,7 @@ struct RecordingControllerTests {
     }
 
     @Test func startSetsErrorWhenSpeechDenied() async {
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { Issue.record("startSession should not be called"); return StubRecorder() },
             requestPermissions: { Self.speechDenied }
         )
@@ -79,7 +95,7 @@ struct RecordingControllerTests {
 
     @Test func startSetsWarningWhenScreenRecordingDenied() async {
         let recorder = StubRecorder()
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { recorder },
             requestPermissions: { Self.micOnly }
         )
@@ -90,7 +106,7 @@ struct RecordingControllerTests {
     }
 
     @Test func startSetsErrorWhenSessionFailsToStart() async {
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { throw StartFailure() },
             requestPermissions: { Self.allGranted }
         )
@@ -102,7 +118,7 @@ struct RecordingControllerTests {
     @Test func stopReturnsToIdleAndPublishesMarkdownURL() async {
         let url = URL(filePath: "/tmp/expected.md")
         let recorder = StubRecorder(stopResult: url)
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { recorder },
             requestPermissions: { Self.allGranted }
         )
@@ -119,7 +135,7 @@ struct RecordingControllerTests {
             let audioFiles: [AudioKind: URL] = [:]
             func stop() async throws -> URL { throw StopFailure() }
         }
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { FailingRecorder() },
             requestPermissions: { Self.allGranted }
         )
@@ -131,7 +147,7 @@ struct RecordingControllerTests {
 
     @Test func dismissNoticesClearsErrorAndWarning() async {
         let recorder = StubRecorder()
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: { recorder },
             requestPermissions: { Self.micOnly }
         )
@@ -145,7 +161,7 @@ struct RecordingControllerTests {
             let audioFiles: [AudioKind: URL] = [:]
             func stop() async throws -> URL { throw StopFailure() }
         }
-        let controller2 = RecordingController(
+        let controller2 = await Self.makeReadyController(
             startSession: { FailingRecorder() },
             requestPermissions: { Self.micOnly }
         )
@@ -161,7 +177,7 @@ struct RecordingControllerTests {
     @Test func successAfterFailureClearsLastError() async {
         var attempt = 0
         let recorder = StubRecorder()
-        let controller = RecordingController(
+        let controller = await Self.makeReadyController(
             startSession: {
                 attempt += 1
                 if attempt == 1 { throw StartFailure() }

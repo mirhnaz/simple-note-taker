@@ -40,27 +40,36 @@ final class RecordingController {
     private var cancellingImport = false
     private let startSession: () async throws -> AudioRecorder
     private let requestPermissions: () async -> Permissions.Status
+    private let probeSummarizerStatus: () async -> SummarizerStatus
 
     init(
         startSession: @escaping () async throws -> AudioRecorder = { try await RecordingSession.start() },
-        requestPermissions: @escaping () async -> Permissions.Status = { await Permissions.requestAll() }
+        requestPermissions: @escaping () async -> Permissions.Status = { await Permissions.requestAll() },
+        probeSummarizerStatus: @escaping () async -> SummarizerStatus = RecordingController.defaultSummarizerProbe
     ) {
         self.startSession = startSession
         self.requestPermissions = requestPermissions
+        self.probeSummarizerStatus = probeSummarizerStatus
     }
 
-    /// Re-checks whether a usable summarizer is reachable. Apple Foundation
-    /// Models needs Apple Intelligence enabled and the on-device model
-    /// downloaded; Ollama needs the server running and the configured model
-    /// pulled. Drives whether Record + Import are usable in the UI.
-    /// Runs the actual probe off MainActor so neither the Apple framework
-    /// access nor the Ollama HTTP call can block UI rendering.
+    /// Re-checks whether a usable summarizer is reachable and publishes the
+    /// result. The actual probe is injected (defaults to the real one) so the
+    /// recording flow can be tested without a live Apple Intelligence / Ollama
+    /// environment.
     func refreshSummarizerStatus() async {
+        self.summarizerStatus = await probeSummarizerStatus()
+    }
+
+    /// Real summarizer probe. Apple Foundation Models needs Apple Intelligence
+    /// enabled and the on-device model downloaded; Ollama needs the server
+    /// running and the configured model pulled. Runs off MainActor so neither
+    /// the Apple framework access nor the Ollama HTTP call blocks UI rendering.
+    static let defaultSummarizerProbe: @Sendable () async -> SummarizerStatus = {
         let settings = AppSettings.shared
         let provider = settings.llmProvider
         let baseURL = settings.ollamaBaseURL
         let modelName = settings.ollamaModel.trimmingCharacters(in: .whitespaces)
-        let status = await Task.detached(priority: .userInitiated) { () -> SummarizerStatus in
+        return await Task.detached(priority: .userInitiated) { () -> SummarizerStatus in
             switch provider {
             case .apple:
                 if let message = FoundationModelsAvailability.currentMessage() {
@@ -85,7 +94,6 @@ final class RecordingController {
                 }
             }
         }.value
-        self.summarizerStatus = status
     }
 
     func start() async {
