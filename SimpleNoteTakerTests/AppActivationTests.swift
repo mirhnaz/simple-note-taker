@@ -3,23 +3,21 @@ import Testing
 
 @MainActor
 struct AppActivationTests {
-    @Test func windowsAddRefThenRelease() {
+    // The app now stays in .regular activation policy at all times, so
+    // windowDidAppear/windowDidDisappear no longer track an open-window count
+    // (that state was removed). These remain as no-op lifecycle hooks; assert
+    // only that the lifecycle is callable in any order without crashing.
+    @Test func lifecycleHooksAreCallable() {
         let activation = AppActivation()
-        #expect(activation.openWindowCount == 0)
         activation.windowDidAppear()
-        #expect(activation.openWindowCount == 1)
         activation.windowDidAppear()
-        #expect(activation.openWindowCount == 2)
         activation.windowDidDisappear()
-        #expect(activation.openWindowCount == 1)
         activation.windowDidDisappear()
-        #expect(activation.openWindowCount == 0)
     }
 
-    @Test func disappearDoesNotGoNegative() {
+    @Test func disappearWithoutAppearIsSafe() {
         let activation = AppActivation()
         activation.windowDidDisappear()
         activation.windowDidDisappear()
-        #expect(activation.openWindowCount == 0)
     }
 }
