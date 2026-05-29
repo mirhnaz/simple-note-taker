@@ -51,8 +51,14 @@ enum MarkdownWriter {
     /// Renders a clean reading-friendly version: no timestamps, no speaker
     /// tags. Adjacent segments of the same source with small gaps are
     /// joined into one paragraph; speaker changes or pauses >3s start a
-    /// new paragraph. Useful when the AI summary isn't enough and you want
-    /// to skim/search the whole meeting as prose.
+    /// new paragraph.
+    ///
+    /// This file is consumed almost entirely by downstream agents (e.g. an
+    /// interview-feedback extractor), so it leads with a YAML frontmatter
+    /// block as a stable, machine-parseable contract — title, ISO-8601 date,
+    /// duration, which speakers are present, word count — followed by the
+    /// prose body. Treat the frontmatter keys as an API: additive changes are
+    /// safe, renames/removals are breaking.
     static func renderReading(
         meetingDate: Date,
         segments: [TranscriptSegment],
@@ -61,23 +67,63 @@ enum MarkdownWriter {
     ) -> String {
         let dateLabel = Self.formatDateLabel(meetingDate, timeZone: timeZone)
         let titleText = (summary?.title).flatMap { $0.isEmpty ? nil : $0 } ?? dateLabel
+        let body = segments.isEmpty ? "_(no speech detected)_" : renderReadingBody(segments: segments)
+        let frontmatter = renderReadingFrontmatter(
+            title: titleText,
+            meetingDate: meetingDate,
+            segments: segments,
+            proseBody: segments.isEmpty ? "" : body,
+            timeZone: timeZone
+        )
+        return frontmatter + "\n" + body + "\n"
+    }
 
-        guard !segments.isEmpty else {
-            return """
-            # Meeting — \(titleText)
-            _Recorded \(dateLabel)_
+    private static func renderReadingFrontmatter(
+        title: String,
+        meetingDate: Date,
+        segments: [TranscriptSegment],
+        proseBody: String,
+        timeZone: TimeZone
+    ) -> String {
+        let durationSeconds = Int((segments.map(\.endSeconds).max() ?? 0).rounded())
+        let speakers = orderedSpeakers(in: segments)
+        let wordCount = proseBody.split { $0 == " " || $0.isNewline }.count
 
-            _(no speech detected)_
-            """ + "\n"
+        var lines = ["---"]
+        lines.append("title: \(yamlQuoted(title))")
+        lines.append("date: \(iso8601(meetingDate, timeZone: timeZone))")
+        lines.append("duration: \(yamlQuoted(TranscriptMerger.formatTimestamp(TimeInterval(durationSeconds))))")
+        lines.append("duration_seconds: \(durationSeconds)")
+        lines.append("speakers: [\(speakers.joined(separator: ", "))]")
+        lines.append("word_count: \(wordCount)")
+        lines.append("---")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Distinct speaker labels (me/them) in first-appearance order.
+    private static func orderedSpeakers(in segments: [TranscriptSegment]) -> [String] {
+        var seen = Set<AudioKind>()
+        var result: [String] = []
+        for segment in segments where !seen.contains(segment.kind) {
+            seen.insert(segment.kind)
+            result.append(TranscriptMerger.speakerLabel(for: segment.kind))
         }
+        return result
+    }
 
-        let body = renderReadingBody(segments: segments)
-        return """
-        # Meeting — \(titleText)
-        _Recorded \(dateLabel)_
+    /// Minimal YAML double-quoted scalar — escapes backslash and quote so a
+    /// title containing `:`/`"`/`#` can't break the frontmatter parse.
+    private static func yamlQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
 
-        \(body)
-        """ + "\n"
+    private static func iso8601(_ date: Date, timeZone: TimeZone) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+        return formatter.string(from: date)
     }
 
     private static let readingParagraphBreakSeconds: TimeInterval = 3.0

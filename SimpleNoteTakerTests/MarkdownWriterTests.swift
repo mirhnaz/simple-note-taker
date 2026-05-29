@@ -68,6 +68,36 @@ struct MarkdownWriterTests {
         #expect(rendered.contains("_(no speech detected)_"))
     }
 
+    @Test func readingRendersAgentFrontmatter() {
+        let segments: [TranscriptSegment] = [
+            .init(kind: .mic, startSeconds: 0, endSeconds: 4, text: "Hello there everyone."),
+            .init(kind: .system, startSeconds: 5, endSeconds: 90, text: "Hi, glad to join.")
+        ]
+        let summary = MeetingSummary(title: "Weekly: sync", headline: "", summary: "", keyPoints: [], actionItems: [], decisions: [])
+        let rendered = MarkdownWriter.renderReading(meetingDate: meetingDate, segments: segments, summary: summary, timeZone: utc)
+
+        // Frontmatter contract.
+        #expect(rendered.hasPrefix("---\n"))
+        #expect(rendered.contains("\ntitle: \"Weekly: sync\"\n"), "title must be YAML-quoted so the colon is safe")
+        #expect(rendered.contains("\ndate: 2026-05-02T14:30:00Z\n"))
+        #expect(rendered.contains("\nduration: \"1:30\"\n"))
+        #expect(rendered.contains("\nduration_seconds: 90\n"))
+        #expect(rendered.contains("\nspeakers: [me, them]\n"))
+        #expect(rendered.contains("\nword_count: 7\n"))
+        // Prose body follows, no timestamps or speaker tags.
+        #expect(rendered.contains("Hello there everyone."))
+        #expect(!rendered.contains("[0:00]"))
+        #expect(!rendered.contains("me:"))
+    }
+
+    @Test func readingFrontmatterFallsBackToDateTitleAndEmptyBody() {
+        let rendered = MarkdownWriter.renderReading(meetingDate: meetingDate, segments: [], summary: nil, timeZone: utc)
+        #expect(rendered.contains("title: \"2026-05-02 14:30\""))
+        #expect(rendered.contains("duration_seconds: 0\n"))
+        #expect(rendered.contains("speakers: []\n"))
+        #expect(rendered.contains("_(no speech detected)_"))
+    }
+
     @Test func writeCreatesBothFiles() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "snt-md-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -19,10 +19,23 @@ For each meeting under `~/Documents/Meetings/`:
 ```
 meeting-2026-05-03-101530-summary.md     # headline, summary, key points, actions, decisions
 meeting-2026-05-03-101530-transcript.md  # raw timestamped lines, labeled by speaker (me/them)
-meeting-2026-05-03-101530-reading.md     # clean prose, no timestamps — for reading & search
+meeting-2026-05-03-101530-reading.md     # YAML frontmatter + clean prose — built for agent consumption
 ```
 
 Audio (`.m4a`) goes to `~/Documents/Meetings/Audio_files/` if you toggle "Keep audio files" in Settings; otherwise it's written to a temp directory and deleted after transcription.
+
+`reading.md` is designed to be fed to downstream agents, so it leads with a stable YAML frontmatter block (treat the keys as an API — additive changes are safe, renames/removals are breaking):
+
+```yaml
+---
+title: "Q3 roadmap sync"
+date: 2026-05-03T10:15:30Z
+duration: "30:30"
+duration_seconds: 1830
+speakers: [me, them]
+word_count: 4213
+---
+```
 
 ## Requirements
 
