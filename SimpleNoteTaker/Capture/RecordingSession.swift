@@ -1,3 +1,4 @@
+import AVFAudio
 import Foundation
 import os
 
@@ -8,6 +9,14 @@ final class RecordingSession: AudioRecorder {
     let startedAt: Date
     let audioFiles: [AudioKind: URL]
     let systemAudioWarning: String?
+
+    /// Non-nil when the mic opened in a degraded low-sample-rate mode
+    /// (Bluetooth HFP). Read by the controller to warn the user so garbled
+    /// live partials read as expected, not as a bug.
+    static func micQualityWarning(for inputFormat: AVAudioFormat) -> String? {
+        guard inputFormat.sampleRate > 0, inputFormat.sampleRate <= 16_000 else { return nil }
+        return "Your mic is in low-quality Bluetooth call mode (\(Int(inputFormat.sampleRate / 1000)) kHz) — common with AirPods once a meeting app uses the mic. Your own speech may transcribe poorly. For best results use the built-in mic or a wired headset. Other participants are captured separately at full quality."
+    }
 
     private let mic: MicCapture
     private let system: SystemAudioCapture?
@@ -60,6 +69,11 @@ final class RecordingSession: AudioRecorder {
         } catch {
             log.warning("system audio capture failed: \(error.localizedDescription, privacy: .public)")
             warning = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+
+        if let micWarning = micQualityWarning(for: mic.inputFormat) {
+            log.warning("low-quality mic input: \(mic.inputFormat.sampleRate, privacy: .public) Hz")
+            warning = [warning, micWarning].compactMap { $0 }.joined(separator: "\n")
         }
 
         log.info("session started; mic + \(system == nil ? "no system audio" : "system audio", privacy: .public)")

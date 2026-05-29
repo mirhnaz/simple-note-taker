@@ -6,6 +6,11 @@ private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "mic")
 
 final class MicCapture {
     let outputURL: URL
+    /// The hardware input format at capture start. Sample rate ≤ 16kHz is the
+    /// tell-tale of a Bluetooth headset in hands-free (HFP/SCO) call mode —
+    /// e.g. AirPods once a conferencing app grabs the mic — which produces
+    /// noticeably degraded audio. Surfaced as a warning by RecordingSession.
+    let inputFormat: AVAudioFormat
     private let engine: AVAudioEngine
     private var audioFile: AVAudioFile?
 
@@ -31,7 +36,7 @@ final class MicCapture {
         let converter: AVAudioConverter? = analyzerFormat.flatMap { AVAudioConverter(from: inputFormat, to: $0) }
         let feeder = TranscriberFeeder(transcriber: transcriber, converter: converter, targetFormat: analyzerFormat)
 
-        let capture = MicCapture(outputURL: outputURL, engine: engine, audioFile: file)
+        let capture = MicCapture(outputURL: outputURL, engine: engine, audioFile: file, inputFormat: inputFormat)
 
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak capture] buffer, _ in
             try? capture?.audioFile?.write(from: buffer)
@@ -43,10 +48,11 @@ final class MicCapture {
         return capture
     }
 
-    private init(outputURL: URL, engine: AVAudioEngine, audioFile: AVAudioFile) {
+    private init(outputURL: URL, engine: AVAudioEngine, audioFile: AVAudioFile, inputFormat: AVAudioFormat) {
         self.outputURL = outputURL
         self.engine = engine
         self.audioFile = audioFile
+        self.inputFormat = inputFormat
     }
 
     func stop() {
