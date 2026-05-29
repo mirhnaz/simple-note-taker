@@ -23,7 +23,8 @@ struct MeetingsTabView: View {
         guard !q.isEmpty else { return meetings }
         return meetings.filter { meeting in
             if meeting.displayTitle.lowercased().contains(q) { return true }
-            if let snippet = meeting.summarySnippet, snippet.lowercased().contains(q) { return true }
+            // Full-text: summary body + reading prose, indexed at load.
+            if meeting.searchText.contains(q) { return true }
             return false
         }
     }
@@ -33,9 +34,9 @@ struct MeetingsTabView: View {
             Text("Previous Meetings")
                 .font(.title3.bold())
             Spacer()
-            TextField("Search", text: $searchQuery)
+            TextField("Search title & contents", text: $searchQuery)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
+                .frame(width: 220)
             Button {
                 Task { await refresh() }
             } label: {

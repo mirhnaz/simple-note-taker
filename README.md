@@ -11,7 +11,7 @@ A macOS app for recording meetings, transcribing them locally, and summarizing t
 - **Structured summary** (title, headline, summary, key points, action items, decisions). Pluggable provider: Apple **FoundationModels** (default, no setup) or any **Ollama** model running locally. For long meetings that exceed Apple's ~4K-token on-device context, Settings suggests large-context Ollama models (Llama 3.1 8B at 128K, Qwen 2.5 at 32K).
 - **Meeting types** (general / interview / standup / 1:1) tailor the summary prompt and are written into each meeting's `reading.md` + `transcript.json` so downstream agents can route on them. Imports pick per-file; live recordings use a default set in Settings.
 - **Per-meeting detail window** with the summary cards. Regenerate dropdown lets you re-run the summary against any installed model without changing your default. Undo to restore the previous version.
-- **Library of past meetings** as cards with title, date, duration, and summary snippet.
+- **Library of past meetings** as cards with title, date, duration, and summary snippet, with **full-text search** across titles, summaries, and the prose transcript.
 
 ## Output layout
 

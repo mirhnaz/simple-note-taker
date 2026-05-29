@@ -68,6 +68,26 @@ struct MeetingLibraryTests {
         #expect(meetings[0].primaryURL.lastPathComponent == summary.lastPathComponent)
     }
 
+    @Test func searchTextIndexesSummaryAndReadingBodies() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let summary = dir.appending(path: "meeting-2026-05-02-100000-summary.md")
+        let reading = dir.appending(path: "meeting-2026-05-02-100000-reading.md")
+        try "# Meeting — Budget review\n\n## Action Items\n- Ship the pricing RFC".write(to: summary, atomically: true, encoding: .utf8)
+        try "---\ntitle: \"Budget review\"\n---\n\nWe talked about the Helsinki rollout at length.".write(to: reading, atomically: true, encoding: .utf8)
+
+        let meetings = try await MeetingLibrary.load(from: dir)
+        #expect(meetings.count == 1)
+        // Word only present in the summary body.
+        #expect(meetings[0].searchText.contains("pricing rfc"))
+        // Word only present in the reading prose.
+        #expect(meetings[0].searchText.contains("helsinki"))
+        // Lowercased for case-insensitive matching.
+        #expect(!meetings[0].searchText.contains("Helsinki"))
+    }
+
     @Test func loadHandlesLegacyCombinedAlone() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "snt-lib-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

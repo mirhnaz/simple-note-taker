@@ -35,12 +35,21 @@ enum MeetingLibrary {
             // Need a content source for the title/snippet — prefer summary, then legacy.
             // Pure transcript-only meetings still appear, with transcript URL only.
             let contentURL = urls.summary ?? urls.legacy
-            let (title, snippet): (String, String?) = contentURL.map {
-                parseTitleAndSnippet(at: $0, fallbackDate: date)
+            let summaryContent = contentURL.flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+            let (title, snippet): (String, String?) = summaryContent.map {
+                parseTitleAndSnippet(content: $0, fallbackDate: date)
             } ?? ("", nil)
             // Duration comes from the last `[mm:ss]` timestamp in the
             // transcript (or legacy combined) file.
             let duration = parseDuration(at: urls.transcript ?? urls.legacy)
+            // Full-text index: summary body (captures action items/decisions)
+            // plus the clean reading prose (the whole conversation). Reading is
+            // preferred over transcript to avoid timestamp/speaker-tag noise.
+            let readingContent = urls.reading.flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+            let searchText = [summaryContent, readingContent]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+                .lowercased()
             return MeetingFile(
                 summaryURL: urls.summary,
                 transcriptURL: urls.transcript,
@@ -49,7 +58,8 @@ enum MeetingLibrary {
                 title: title,
                 recordedAt: date,
                 summarySnippet: snippet,
-                durationSeconds: duration
+                durationSeconds: duration,
+                searchText: searchText
             )
         }
 

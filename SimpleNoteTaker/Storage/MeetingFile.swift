@@ -15,6 +15,11 @@ struct MeetingFile: Identifiable, Hashable, Sendable {
     let recordedAt: Date
     let summarySnippet: String?
     let durationSeconds: TimeInterval?
+    /// Lowercased, concatenated searchable text (summary body + reading prose)
+    /// built at load time so the library's search box can match the full
+    /// meeting content, not just the title and snippet. Empty if neither file
+    /// could be read.
+    let searchText: String
 
     var id: Date { recordedAt }
 
