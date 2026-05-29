@@ -98,6 +98,28 @@ struct MarkdownWriterTests {
         #expect(rendered.contains("_(no speech detected)_"))
     }
 
+    @Test func transcriptJSONHasMetadataAndTurns() throws {
+        let segments: [TranscriptSegment] = [
+            .init(kind: .mic, startSeconds: 0, endSeconds: 4, text: "Hello."),
+            .init(kind: .system, startSeconds: 5, endSeconds: 12, text: "Hi there.")
+        ]
+        let summary = MeetingSummary(title: "1:1 with Sam", headline: "", summary: "", keyPoints: [], actionItems: [], decisions: [])
+        let data = MeetingTranscriptJSON.render(meetingDate: meetingDate, segments: segments, summary: summary, timeZone: utc)
+        let obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(obj["title"] as? String == "1:1 with Sam")
+        #expect(obj["date"] as? String == "2026-05-02T14:30:00Z")
+        #expect(obj["duration_seconds"] as? Int == 12)
+        #expect(obj["speakers"] as? [String] == ["me", "them"])
+
+        let turns = obj["segments"] as! [[String: Any]]
+        #expect(turns.count == 2)
+        #expect(turns[0]["speaker"] as? String == "me")
+        #expect(turns[0]["text"] as? String == "Hello.")
+        #expect(turns[1]["speaker"] as? String == "them")
+        #expect((turns[1]["end"] as? Double) == 12.0)
+    }
+
     @Test func writeCreatesBothFiles() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "snt-md-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

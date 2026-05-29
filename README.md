@@ -20,6 +20,7 @@ For each meeting under `~/Documents/Meetings/`:
 meeting-2026-05-03-101530-summary.md     # headline, summary, key points, actions, decisions
 meeting-2026-05-03-101530-transcript.md  # raw timestamped lines, labeled by speaker (me/them)
 meeting-2026-05-03-101530-reading.md     # YAML frontmatter + clean prose — built for agent consumption
+meeting-2026-05-03-101530-transcript.json # structured turn-level data (speaker/start/end/text) for agents
 ```
 
 Audio (`.m4a`) goes to `~/Documents/Meetings/Audio_files/` if you toggle "Keep audio files" in Settings; otherwise it's written to a temp directory and deleted after transcription.

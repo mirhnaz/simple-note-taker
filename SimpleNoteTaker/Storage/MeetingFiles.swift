@@ -22,6 +22,12 @@ enum MeetingFiles {
         "meeting-\(timestamp(date, timeZone: timeZone))-reading.md"
     }
 
+    /// Structured, turn-level transcript for downstream agents that want
+    /// field-addressable data instead of prose.
+    static func transcriptJSONFilename(for date: Date, timeZone: TimeZone = .current) -> String {
+        "meeting-\(timestamp(date, timeZone: timeZone))-transcript.json"
+    }
+
     /// Pre-M11.0 layout — a single combined `meeting-<ts>.md` containing both
     /// summary and transcript. Used only by `MeetingLibrary` for legacy
     /// detection; nothing writes this any more.

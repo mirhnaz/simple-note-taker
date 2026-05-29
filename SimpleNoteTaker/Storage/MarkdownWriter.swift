@@ -4,6 +4,7 @@ struct WrittenMeeting {
     let summaryURL: URL
     let transcriptURL: URL
     let readingURL: URL
+    let transcriptJSONURL: URL
 }
 
 enum MarkdownWriter {
@@ -187,23 +188,27 @@ enum MarkdownWriter {
         let summaryURL = directory.appending(path: MeetingFiles.summaryFilename(for: meetingDate))
         let transcriptURL = directory.appending(path: MeetingFiles.transcriptFilename(for: meetingDate))
         let readingURL = directory.appending(path: MeetingFiles.readingFilename(for: meetingDate))
+        let transcriptJSONURL = directory.appending(path: MeetingFiles.transcriptJSONFilename(for: meetingDate))
 
         let summaryContent = renderSummary(meetingDate: meetingDate, summary: summary)
         let transcriptContent = renderTranscript(meetingDate: meetingDate, segments: segments)
         let readingContent = renderReading(meetingDate: meetingDate, segments: segments, summary: summary)
+        let transcriptJSONData = MeetingTranscriptJSON.render(meetingDate: meetingDate, segments: segments, summary: summary)
 
         try summaryContent.write(to: summaryURL, atomically: true, encoding: .utf8)
         try transcriptContent.write(to: transcriptURL, atomically: true, encoding: .utf8)
         try readingContent.write(to: readingURL, atomically: true, encoding: .utf8)
+        try transcriptJSONData.write(to: transcriptJSONURL)
 
         return WrittenMeeting(
             summaryURL: summaryURL,
             transcriptURL: transcriptURL,
-            readingURL: readingURL
+            readingURL: readingURL,
+            transcriptJSONURL: transcriptJSONURL
         )
     }
 
-    private static func formatDateLabel(_ date: Date, timeZone: TimeZone) -> String {
+    static func formatDateLabel(_ date: Date, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         formatter.locale = Locale(identifier: "en_US_POSIX")
