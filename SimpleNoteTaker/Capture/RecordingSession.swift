@@ -12,6 +12,7 @@ final class RecordingSession: AudioRecorder {
     private let mic: MicCapture
     private let system: SystemAudioCapture?
     let micTranscriber: LiveTranscriber
+    let systemTranscriber: LiveTranscriber?
     private let notesDirectory: URL
     private let retainAudioFiles: Bool
     private let summarizer: any Summarizing
@@ -45,10 +46,16 @@ final class RecordingSession: AudioRecorder {
 
         var files: [AudioKind: URL] = [.mic: micURL]
         var system: SystemAudioCapture?
+        var systemTranscriber: LiveTranscriber?
         var warning: String?
 
         do {
-            system = try await SystemAudioCapture.start(outputURL: systemURL)
+            // Live transcriber for other participants. Captured via system
+            // audio, which comes through at full quality even when the user's
+            // own mic is degraded by Bluetooth (e.g. AirPods in HFP mode).
+            let liveSystem = try await LiveTranscriber.start(kind: .system)
+            system = try await SystemAudioCapture.start(outputURL: systemURL, transcriber: liveSystem)
+            systemTranscriber = liveSystem
             files[.system] = systemURL
         } catch {
             log.warning("system audio capture failed: \(error.localizedDescription, privacy: .public)")
@@ -63,6 +70,7 @@ final class RecordingSession: AudioRecorder {
             mic: mic,
             system: system,
             micTranscriber: micTranscriber,
+            systemTranscriber: systemTranscriber,
             notesDirectory: settings.notesDirectory,
             retainAudioFiles: settings.retainAudioFiles,
             summarizer: summarizer,
@@ -78,6 +86,7 @@ final class RecordingSession: AudioRecorder {
         mic: MicCapture,
         system: SystemAudioCapture?,
         micTranscriber: LiveTranscriber,
+        systemTranscriber: LiveTranscriber?,
         notesDirectory: URL,
         retainAudioFiles: Bool,
         summarizer: any Summarizing,
@@ -90,6 +99,7 @@ final class RecordingSession: AudioRecorder {
         self.mic = mic
         self.system = system
         self.micTranscriber = micTranscriber
+        self.systemTranscriber = systemTranscriber
         self.notesDirectory = notesDirectory
         self.retainAudioFiles = retainAudioFiles
         self.summarizer = summarizer
@@ -103,9 +113,14 @@ final class RecordingSession: AudioRecorder {
         await system?.stop()
         log.info("audio captures stopped, finalizing transcripts")
 
-        // Always drain the live transcriber so its analyzer releases.
+        // Always drain the live transcribers so their analyzers release. The
+        // system transcriber is display-only — the final "them" transcript is
+        // a fresh pass over the recorded file below — so discard its segments.
         let liveMicSegments = await stopMicTranscriber()
         log.info("live mic segments: \(liveMicSegments.count, privacy: .public)")
+        if let systemTranscriber {
+            _ = await systemTranscriber.stop()
+        }
 
         let micSegments: [TranscriptSegment]
         if useFilePassForMic, let micURL = audioFiles[.mic] {

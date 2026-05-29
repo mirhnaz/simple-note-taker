@@ -85,14 +85,24 @@ struct MenuBarView: View {
                         .symbolEffect(.pulse, options: .repeating)
                 }
                 if let session = controller.session as? RecordingSession {
-                    let partial = session.micTranscriber.currentPartial
-                    if !partial.isEmpty {
-                        Text(partial)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .frame(maxWidth: 300, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                    let turns = LiveTranscriptMerge.turns(
+                        micSegments: session.micTranscriber.segments,
+                        micPartial: session.micTranscriber.currentPartial,
+                        systemSegments: session.systemTranscriber?.segments ?? [],
+                        systemPartial: session.systemTranscriber?.currentPartial ?? ""
+                    )
+                    if let latest = turns.last {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(latest.speaker):")
+                                .font(.caption2).bold()
+                                .foregroundStyle(latest.kind == .mic ? Color.accentColor : .orange)
+                            Text(latest.text)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: 300, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

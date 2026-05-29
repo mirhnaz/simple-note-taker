@@ -105,45 +105,41 @@ struct RecordingTabView: View {
     }
 
     private func liveSegmentsView(session: RecordingSession) -> some View {
-        let segments = session.micTranscriber.segments
-        let partial = session.micTranscriber.currentPartial
-        let consolidated = consolidate(segments: segments, partial: partial)
+        let turns = LiveTranscriptMerge.turns(
+            micSegments: session.micTranscriber.segments,
+            micPartial: session.micTranscriber.currentPartial,
+            systemSegments: session.systemTranscriber?.segments ?? [],
+            systemPartial: session.systemTranscriber?.currentPartial ?? ""
+        )
         return ScrollViewReader { proxy in
-            VStack(alignment: .leading, spacing: 0) {
-                if consolidated.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                if turns.isEmpty {
                     Text("Listening for speech…")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } else {
-                    Text(consolidated)
-                        .font(.body)
-                        .lineSpacing(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    ForEach(turns) { turn in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(turn.speaker)
+                                .font(.caption).bold()
+                                .foregroundStyle(turn.kind == .mic ? Color.accentColor : .orange)
+                            Text(turn.text)
+                                .font(.body)
+                                .lineSpacing(4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                    }
                     Color.clear.frame(height: 1).id("liveTranscriptBottom")
                 }
             }
             .padding(20)
-            .onChange(of: consolidated) { _, _ in
+            .onChange(of: turns.last?.text) { _, _ in
                 withAnimation { proxy.scrollTo("liveTranscriptBottom", anchor: .bottom) }
             }
         }
-    }
-
-    /// Joins all final segments into a single flowing paragraph and appends
-    /// the in-progress partial when it has new text the segments don't yet
-    /// reflect. SpeechAnalyzer often emits the partial = last segment, so we
-    /// avoid double-printing in that case.
-    private func consolidate(segments: [TranscriptSegment], partial: String) -> String {
-        var pieces = segments.map { $0.text.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        let trimmedPartial = partial.trimmingCharacters(in: .whitespaces)
-        if !trimmedPartial.isEmpty && trimmedPartial != pieces.last {
-            pieces.append(trimmedPartial)
-        }
-        return pieces.joined(separator: " ")
     }
 
 private var idlePlaceholder: some View {

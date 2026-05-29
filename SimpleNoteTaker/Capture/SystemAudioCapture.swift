@@ -25,7 +25,7 @@ final class SystemAudioCapture {
     private let writerInput: AVAssetWriterInput
     private let outputHandler: SystemAudioOutputHandler
 
-    static func start(outputURL: URL) async throws -> SystemAudioCapture {
+    static func start(outputURL: URL, transcriber: LiveTranscriber? = nil) async throws -> SystemAudioCapture {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -55,7 +55,7 @@ final class SystemAudioCapture {
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
 
-        let handler = SystemAudioOutputHandler(writer: writer, input: input)
+        let handler = SystemAudioOutputHandler(writer: writer, input: input, transcriber: transcriber)
         let videoSink = SystemVideoSink()
         let stream = SCStream(filter: filter, configuration: config, delegate: nil)
         try stream.addStreamOutput(handler, type: .audio, sampleHandlerQueue: handler.queue)
@@ -97,11 +97,17 @@ private final class SystemAudioOutputHandler: NSObject, SCStreamOutput, @uncheck
     let queue = DispatchQueue(label: "system-audio-output")
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
+    private let transcriber: LiveTranscriber?
+    private let targetFormat: AVAudioFormat?
     private var sessionStarted = false
+    private var converter: AVAudioConverter?
+    private var converterSourceFormat: AVAudioFormat?
 
-    init(writer: AVAssetWriter, input: AVAssetWriterInput) {
+    init(writer: AVAssetWriter, input: AVAssetWriterInput, transcriber: LiveTranscriber?) {
         self.writer = writer
         self.input = input
+        self.transcriber = transcriber
+        self.targetFormat = transcriber?.analyzerFormat
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
@@ -116,5 +122,67 @@ private final class SystemAudioOutputHandler: NSObject, SCStreamOutput, @uncheck
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
         }
+
+        feedTranscriber(sampleBuffer)
+    }
+
+    /// Converts the captured CMSampleBuffer to the analyzer's PCM format and
+    /// feeds the live transcriber, so the menu bar shows other participants'
+    /// speech in real time. Display-only: the final transcript is still a
+    /// fresh pass over the recorded file in RecordingSession.stop().
+    private func feedTranscriber(_ sampleBuffer: CMSampleBuffer) {
+        guard let transcriber, let targetFormat else { return }
+        guard let pcm = Self.pcmBuffer(from: sampleBuffer) else { return }
+
+        // Build (and cache) a converter from the source format to the
+        // analyzer format. SCStream audio is typically 48kHz stereo Float32;
+        // the analyzer wants its own preferred format.
+        if converter == nil || converterSourceFormat != pcm.format {
+            converter = AVAudioConverter(from: pcm.format, to: targetFormat)
+            converterSourceFormat = pcm.format
+        }
+        guard let converter else { return }
+
+        let ratio = targetFormat.sampleRate / pcm.format.sampleRate
+        let capacity = AVAudioFrameCount(Double(pcm.frameLength) * ratio + 1024)
+        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
+        var consumed = false
+        var convertError: NSError?
+        let status = converter.convert(to: outBuffer, error: &convertError) { _, statusPtr in
+            if consumed {
+                statusPtr.pointee = .noDataNow
+                return nil
+            }
+            consumed = true
+            statusPtr.pointee = .haveData
+            return pcm
+        }
+        if status == .error || convertError != nil { return }
+        guard outBuffer.frameLength > 0 else { return }
+        transcriber.feed(outBuffer)
+    }
+
+    /// Wraps a CMSampleBuffer's audio samples in an AVAudioPCMBuffer without
+    /// re-encoding. Returns nil if the buffer has no usable audio format.
+    private static func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
+        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else {
+            return nil
+        }
+        let format = AVAudioFormat(streamDescription: asbd)
+        guard let format else { return nil }
+        let frameCount = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
+        guard frameCount > 0,
+              let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return nil
+        }
+        pcm.frameLength = frameCount
+        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sampleBuffer,
+            at: 0,
+            frameCount: Int32(frameCount),
+            into: pcm.mutableAudioBufferList
+        )
+        return status == noErr ? pcm : nil
     }
 }
