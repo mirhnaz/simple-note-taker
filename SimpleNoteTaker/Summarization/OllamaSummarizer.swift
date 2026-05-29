@@ -30,7 +30,7 @@ struct OllamaSummarizer: Summarizing {
         self.session = session
     }
 
-    func summarize(transcript: String) async -> MeetingSummary? {
+    func summarize(transcript: String, meetingType: MeetingType) async -> MeetingSummary? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard !model.isEmpty else {
@@ -40,7 +40,7 @@ struct OllamaSummarizer: Summarizing {
 
         let client = OllamaClient(baseURL: baseURL, session: session)
         let messages: [OllamaChatMessage] = [
-            .init(role: "system", content: SummarizationGuidelines.systemPrompt + "\n\nRespond with JSON only."),
+            .init(role: "system", content: SummarizationGuidelines.systemPrompt(for: meetingType) + "\n\nRespond with JSON only."),
             .init(role: "user", content: SummarizationGuidelines.userPrompt(transcript: trimmed))
         ]
         do {

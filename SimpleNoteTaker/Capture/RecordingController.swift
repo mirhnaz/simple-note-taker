@@ -165,7 +165,7 @@ final class RecordingController {
         }
     }
 
-    func importRecording(from sourceURL: URL, meetingDate: Date) async {
+    func importRecording(from sourceURL: URL, meetingDate: Date, meetingType: MeetingType = .general) async {
         guard case .idle = state else { return }
         guard summarizerStatus.isReady else {
             lastError = summarizerStatus.unavailableMessage ?? "Summarization isn't set up. Open Settings to configure a provider."
@@ -179,7 +179,8 @@ final class RecordingController {
         do {
             let url = try await ImportSession.run(
                 sourceURL: sourceURL,
-                meetingDate: meetingDate
+                meetingDate: meetingDate,
+                meetingType: meetingType
             ) { phase in
                 self.importPhase = phase
             }

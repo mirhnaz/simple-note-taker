@@ -5,6 +5,14 @@ import Foundation
 /// providers — varying the prompt by provider was producing wildly different
 /// summaries for the same transcript.
 enum SummarizationGuidelines {
+    /// System prompt tailored to the meeting type: the shared base rules plus
+    /// any type-specific focus guidance.
+    static func systemPrompt(for meetingType: MeetingType) -> String {
+        let guidance = meetingType.summaryGuidance
+        guard !guidance.isEmpty else { return systemPrompt }
+        return systemPrompt + "\n\n" + guidance
+    }
+
     static let systemPrompt = """
     You read transcripts of business meetings and produce a structured summary.
 

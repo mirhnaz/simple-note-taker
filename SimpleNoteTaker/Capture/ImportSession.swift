@@ -41,6 +41,7 @@ enum ImportSession {
     static func run(
         sourceURL: URL,
         meetingDate: Date? = nil,
+        meetingType: MeetingType = .general,
         settings: AppSettings = .shared,
         summarizer: (any Summarizing)? = nil,
         fileTranscriber: (any FileTranscribing)? = nil,
@@ -72,7 +73,7 @@ enum ImportSession {
         log.info("import segments: \(segments.count, privacy: .public)")
 
         await onPhase(.summarizing)
-        let summary = await summarize(segments: segments, summarizer: summarizer)
+        let summary = await summarize(segments: segments, summarizer: summarizer, meetingType: meetingType)
         log.info("import summary: \(summary == nil ? "(none)" : "ok", privacy: .public)")
 
         await onPhase(.writing)
@@ -80,6 +81,7 @@ enum ImportSession {
             meetingDate: resolvedDate,
             segments: segments,
             summary: summary,
+            meetingType: meetingType,
             to: settings.notesDirectory
         )
         log.info("import wrote: \(written.summaryURL.lastPathComponent, privacy: .public)")
@@ -157,13 +159,14 @@ enum ImportSession {
 
     private static func summarize(
         segments: [TranscriptSegment],
-        summarizer: any Summarizing
+        summarizer: any Summarizing,
+        meetingType: MeetingType
     ) async -> MeetingSummary? {
         guard !segments.isEmpty else { return nil }
         let transcript = TranscriptMerger.renderTranscript(segments)
         do {
             return try await withTimeout(seconds: summaryTimeoutSeconds) {
-                await summarizer.summarize(transcript: transcript)
+                await summarizer.summarize(transcript: transcript, meetingType: meetingType)
             }
         } catch {
             log.error("import summarization timed out: \(error.localizedDescription, privacy: .public)")

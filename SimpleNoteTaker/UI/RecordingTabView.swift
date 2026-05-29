@@ -24,10 +24,10 @@ struct RecordingTabView: View {
                 fileName: item.url.lastPathComponent,
                 initialDate: item.meetingDate,
                 onCancel: { pendingImport = nil },
-                onImport: { confirmedDate in
+                onImport: { confirmedDate, meetingType in
                     let url = item.url
                     pendingImport = nil
-                    Task { await controller.importRecording(from: url, meetingDate: confirmedDate) }
+                    Task { await controller.importRecording(from: url, meetingDate: confirmedDate, meetingType: meetingType) }
                 }
             )
         }
@@ -315,21 +315,23 @@ private struct ImportConfirmationSheet: View {
     let fileName: String
     let initialDate: Date
     let onCancel: () -> Void
-    let onImport: (Date) -> Void
+    let onImport: (Date, MeetingType) -> Void
 
     @State private var meetingDate: Date
+    @State private var meetingType: MeetingType
 
     init(
         fileName: String,
         initialDate: Date,
         onCancel: @escaping () -> Void,
-        onImport: @escaping (Date) -> Void
+        onImport: @escaping (Date, MeetingType) -> Void
     ) {
         self.fileName = fileName
         self.initialDate = initialDate
         self.onCancel = onCancel
         self.onImport = onImport
         self._meetingDate = State(initialValue: initialDate)
+        self._meetingType = State(initialValue: AppSettings.shared.defaultMeetingType)
     }
 
     var body: some View {
@@ -348,7 +350,12 @@ private struct ImportConfirmationSheet: View {
                 selection: $meetingDate,
                 displayedComponents: [.date, .hourAndMinute]
             )
-            Text("Defaults to the file's modification date. Adjust if the meeting happened at a different time.")
+            Picker("Meeting type", selection: $meetingType) {
+                ForEach(MeetingType.allCases) { type in
+                    Text(type.displayName).tag(type)
+                }
+            }
+            Text("Meeting type tailors the summary and is recorded in the meeting's files so downstream agents can route on it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -356,7 +363,7 @@ private struct ImportConfirmationSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Import") { onImport(meetingDate) }
+                Button("Import") { onImport(meetingDate, meetingType) }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }

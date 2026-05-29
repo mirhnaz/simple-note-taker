@@ -64,6 +64,7 @@ enum MarkdownWriter {
         meetingDate: Date,
         segments: [TranscriptSegment],
         summary: MeetingSummary? = nil,
+        meetingType: MeetingType = .general,
         timeZone: TimeZone = .current
     ) -> String {
         let dateLabel = Self.formatDateLabel(meetingDate, timeZone: timeZone)
@@ -73,6 +74,7 @@ enum MarkdownWriter {
             title: titleText,
             meetingDate: meetingDate,
             segments: segments,
+            meetingType: meetingType,
             proseBody: segments.isEmpty ? "" : body,
             timeZone: timeZone
         )
@@ -83,6 +85,7 @@ enum MarkdownWriter {
         title: String,
         meetingDate: Date,
         segments: [TranscriptSegment],
+        meetingType: MeetingType,
         proseBody: String,
         timeZone: TimeZone
     ) -> String {
@@ -92,6 +95,7 @@ enum MarkdownWriter {
 
         var lines = ["---"]
         lines.append("title: \(yamlQuoted(title))")
+        lines.append("type: \(meetingType.rawValue)")
         lines.append("date: \(iso8601(meetingDate, timeZone: timeZone))")
         lines.append("duration: \(yamlQuoted(TranscriptMerger.formatTimestamp(TimeInterval(durationSeconds))))")
         lines.append("duration_seconds: \(durationSeconds)")
@@ -182,6 +186,7 @@ enum MarkdownWriter {
         meetingDate: Date,
         segments: [TranscriptSegment],
         summary: MeetingSummary? = nil,
+        meetingType: MeetingType = .general,
         to directory: URL
     ) throws -> WrittenMeeting {
         try Paths.ensureDirectoryExists(directory)
@@ -192,8 +197,8 @@ enum MarkdownWriter {
 
         let summaryContent = renderSummary(meetingDate: meetingDate, summary: summary)
         let transcriptContent = renderTranscript(meetingDate: meetingDate, segments: segments)
-        let readingContent = renderReading(meetingDate: meetingDate, segments: segments, summary: summary)
-        let transcriptJSONData = MeetingTranscriptJSON.render(meetingDate: meetingDate, segments: segments, summary: summary)
+        let readingContent = renderReading(meetingDate: meetingDate, segments: segments, summary: summary, meetingType: meetingType)
+        let transcriptJSONData = MeetingTranscriptJSON.render(meetingDate: meetingDate, segments: segments, summary: summary, meetingType: meetingType)
 
         try summaryContent.write(to: summaryURL, atomically: true, encoding: .utf8)
         try transcriptContent.write(to: transcriptURL, atomically: true, encoding: .utf8)

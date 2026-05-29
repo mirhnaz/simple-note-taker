@@ -12,6 +12,7 @@ enum SettingsKeys {
     static let mlxWhisperModel = "mlxWhisperModel"
     static let mlxWhisperPath = "mlxWhisperPath"
     static let mlxWhisperLanguage = "mlxWhisperLanguage"
+    static let defaultMeetingType = "defaultMeetingType"
 }
 
 enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
@@ -112,6 +113,13 @@ struct AppSettings {
         // Distinguishes "never set" (use default "en") from "user set to
         // empty string" (auto-detect requested).
         return raw ?? Self.defaultMLXWhisperLanguage
+    }
+
+    /// Meeting type applied to live recordings (and the default the import
+    /// sheet pre-selects). Drives the tailored summarization prompt.
+    var defaultMeetingType: MeetingType {
+        let raw = defaults.string(forKey: SettingsKeys.defaultMeetingType) ?? ""
+        return MeetingType(rawValue: raw) ?? .general
     }
 
     func makeSummarizer() -> any Summarizing {

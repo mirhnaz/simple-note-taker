@@ -5,11 +5,18 @@ import os
 private let log = Logger(subsystem: "com.mir.SimpleNoteTaker", category: "summarizer")
 
 protocol Summarizing: Sendable {
-    func summarize(transcript: String) async -> MeetingSummary?
+    func summarize(transcript: String, meetingType: MeetingType) async -> MeetingSummary?
+}
+
+extension Summarizing {
+    /// Convenience for callers that don't care about the meeting type.
+    func summarize(transcript: String) async -> MeetingSummary? {
+        await summarize(transcript: transcript, meetingType: .general)
+    }
 }
 
 struct FoundationModelsSummarizer: Summarizing {
-    func summarize(transcript: String) async -> MeetingSummary? {
+    func summarize(transcript: String, meetingType: MeetingType) async -> MeetingSummary? {
         let model = SystemLanguageModel.default
         guard model.isAvailable else {
             log.warning("system language model unavailable: \(String(describing: model.availability), privacy: .public)")
@@ -18,7 +25,7 @@ struct FoundationModelsSummarizer: Summarizing {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let session = LanguageModelSession(instructions: SummarizationGuidelines.systemPrompt)
+        let session = LanguageModelSession(instructions: SummarizationGuidelines.systemPrompt(for: meetingType))
 
         do {
             let response = try await session.respond(

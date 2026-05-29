@@ -8,13 +8,14 @@ import Foundation
 enum MeetingTranscriptJSON {
     struct Document: Encodable {
         let title: String
+        let type: String          // meeting type (general/interview/standup/oneOnOne)
         let date: String          // ISO-8601
         let durationSeconds: Int
         let speakers: [String]    // distinct speaker labels, first-appearance order
         let segments: [Segment]
 
         enum CodingKeys: String, CodingKey {
-            case title, date, speakers, segments
+            case title, type, date, speakers, segments
             case durationSeconds = "duration_seconds"
         }
     }
@@ -30,6 +31,7 @@ enum MeetingTranscriptJSON {
         meetingDate: Date,
         segments: [TranscriptSegment],
         summary: MeetingSummary? = nil,
+        meetingType: MeetingType = .general,
         timeZone: TimeZone = .current
     ) -> Data {
         let ordered = TranscriptMerger.interleave(segments)
@@ -48,6 +50,7 @@ enum MeetingTranscriptJSON {
 
         let doc = Document(
             title: title,
+            type: meetingType.rawValue,
             date: isoFormatter.string(from: meetingDate),
             durationSeconds: Int((segments.map(\.endSeconds).max() ?? 0).rounded()),
             speakers: speakers,

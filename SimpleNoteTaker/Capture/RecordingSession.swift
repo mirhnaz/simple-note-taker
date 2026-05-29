@@ -27,6 +27,7 @@ final class RecordingSession: AudioRecorder {
     private let summarizer: any Summarizing
     private let fileTranscriber: any FileTranscribing
     private let useFilePassForMic: Bool
+    private let meetingType: MeetingType
 
     private static let stopTimeoutSeconds: TimeInterval = 30
     private static let fileTranscriptionTimeoutSeconds: TimeInterval = 600
@@ -40,6 +41,7 @@ final class RecordingSession: AudioRecorder {
         let summarizer = summarizer ?? settings.makeSummarizer()
         let fileTranscriber = fileTranscriber ?? settings.makeFileTranscriber()
         let useFilePassForMic = settings.transcriptionProvider != .apple
+        let meetingType = settings.defaultMeetingType
         let startedAt = Date()
         let directory = settings.retainAudioFiles
             ? settings.audioDirectory
@@ -89,7 +91,8 @@ final class RecordingSession: AudioRecorder {
             retainAudioFiles: settings.retainAudioFiles,
             summarizer: summarizer,
             fileTranscriber: fileTranscriber,
-            useFilePassForMic: useFilePassForMic
+            useFilePassForMic: useFilePassForMic,
+            meetingType: meetingType
         )
     }
 
@@ -105,7 +108,8 @@ final class RecordingSession: AudioRecorder {
         retainAudioFiles: Bool,
         summarizer: any Summarizing,
         fileTranscriber: any FileTranscribing,
-        useFilePassForMic: Bool
+        useFilePassForMic: Bool,
+        meetingType: MeetingType
     ) {
         self.startedAt = startedAt
         self.audioFiles = audioFiles
@@ -119,6 +123,7 @@ final class RecordingSession: AudioRecorder {
         self.summarizer = summarizer
         self.fileTranscriber = fileTranscriber
         self.useFilePassForMic = useFilePassForMic
+        self.meetingType = meetingType
     }
 
     func stop() async throws -> URL {
@@ -155,6 +160,7 @@ final class RecordingSession: AudioRecorder {
             meetingDate: startedAt,
             segments: allSegments,
             summary: summary,
+            meetingType: meetingType,
             to: notesDirectory
         )
         let url = written.summaryURL
@@ -187,9 +193,10 @@ final class RecordingSession: AudioRecorder {
         guard !segments.isEmpty else { return nil }
         let transcript = TranscriptMerger.renderTranscript(segments)
         let summarizer = self.summarizer
+        let meetingType = self.meetingType
         do {
             return try await withTimeout(seconds: Self.summaryTimeoutSeconds) {
-                await summarizer.summarize(transcript: transcript)
+                await summarizer.summarize(transcript: transcript, meetingType: meetingType)
             }
         } catch {
             log.error("summarization timed out: \(error.localizedDescription, privacy: .public)")

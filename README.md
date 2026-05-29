@@ -9,6 +9,7 @@ A macOS app for recording meetings, transcribing them locally, and summarizing t
 - **Import existing recordings**: drop in an audio *or* video file (mp4/mov are extracted via ffmpeg) and it runs through the same transcribe → summarize → save pipeline, with a live progress bar and a Cancel button.
 - **Final transcript** written to separate files. Pluggable: Apple `SpeechAnalyzer` (default, no setup) or **mlx-whisper** (`whisper-base-mlx` / `whisper-large-v3-turbo` / `whisper-large-v3-mlx`) for higher accuracy.
 - **Structured summary** (title, headline, summary, key points, action items, decisions). Pluggable provider: Apple **FoundationModels** (default, no setup) or any **Ollama** model running locally. For long meetings that exceed Apple's ~4K-token on-device context, Settings suggests large-context Ollama models (Llama 3.1 8B at 128K, Qwen 2.5 at 32K).
+- **Meeting types** (general / interview / standup / 1:1) tailor the summary prompt and are written into each meeting's `reading.md` + `transcript.json` so downstream agents can route on them. Imports pick per-file; live recordings use a default set in Settings.
 - **Per-meeting detail window** with the summary cards. Regenerate dropdown lets you re-run the summary against any installed model without changing your default. Undo to restore the previous version.
 - **Library of past meetings** as cards with title, date, duration, and summary snippet.
 

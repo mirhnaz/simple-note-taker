@@ -489,6 +489,7 @@ private struct SummarizationSettingsTab: View {
     @AppStorage(SettingsKeys.ollamaBaseURL) private var ollamaBaseURL: String = AppSettings.defaultOllamaBaseURL
     @AppStorage(SettingsKeys.ollamaModel) private var ollamaModel: String = ""
     @AppStorage(SettingsKeys.ollamaTemperature) private var ollamaTemperature: Double = AppSettings.defaultOllamaTemperature
+    @AppStorage(SettingsKeys.defaultMeetingType) private var defaultMeetingTypeRaw: String = MeetingType.general.rawValue
 
     @State private var availableModels: [String] = []
     @State private var modelLoadStatus: String?
@@ -533,6 +534,18 @@ private struct SummarizationSettingsTab: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            Section("Meeting type") {
+                Picker("Default for new recordings", selection: $defaultMeetingTypeRaw) {
+                    ForEach(MeetingType.allCases) { type in
+                        Text(type.displayName).tag(type.rawValue)
+                    }
+                }
+                Text("Tailors the summary prompt and is written into each meeting's reading.md / transcript.json so downstream agents can route on it. Imports let you pick per-file; live recordings use this default.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if llmProviderRaw == LLMProvider.ollama.rawValue {
