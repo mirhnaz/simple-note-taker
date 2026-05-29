@@ -53,6 +53,34 @@ struct MLXWhisperTranscriberTests {
         }
     }
 
+    @Test func collapsesLoopedSegmentsByCompressionRatio() throws {
+        // A run of repetition-loop segments (high compression ratio) bracketed
+        // by normal speech. The loop should collapse to one [inaudible] marker;
+        // the legitimate segment just above Whisper's 2.4 "failed" line (2.56)
+        // must survive.
+        let json = """
+        {
+          "text": "...",
+          "segments": [
+            {"start": 0.0, "end": 5.0, "text": "Real opening line.", "compression_ratio": 1.7},
+            {"start": 5.0, "end": 10.0, "text": "Borderline but real.", "compression_ratio": 2.56},
+            {"start": 10.0, "end": 15.0, "text": "one thing I really liked", "compression_ratio": 10.8},
+            {"start": 15.0, "end": 20.0, "text": "one thing I really liked and I think", "compression_ratio": 10.8},
+            {"start": 20.0, "end": 25.0, "text": "Back to real speech.", "compression_ratio": 1.9}
+          ],
+          "language": "en"
+        }
+        """.data(using: .utf8)!
+        let segments = try MLXWhisperTranscriber.parseSegments(jsonData: json, kind: .mic)
+        #expect(segments.count == 4)
+        #expect(segments[0].text == "Real opening line.")
+        #expect(segments[1].text == "Borderline but real.")
+        #expect(segments[2].text == "[inaudible]")
+        #expect(segments[2].startSeconds == 10.0)
+        #expect(segments[2].endSeconds == 20.0)
+        #expect(segments[3].text == "Back to real speech.")
+    }
+
     @Test func parsesJSONWithPythonNonFiniteFloats() throws {
         // mlx_whisper's json.dump emits bare NaN / Infinity / -Infinity for
         // non-finite metadata floats, which strict JSON forbids.

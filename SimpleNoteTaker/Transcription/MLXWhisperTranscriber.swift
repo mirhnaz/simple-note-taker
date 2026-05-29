@@ -60,14 +60,7 @@ struct MLXWhisperTranscriber: FileTranscribing {
         do {
             let payload = try JSONDecoder().decode(WhisperOutput.self, from: sanitizeNonFiniteJSON(jsonData))
             if let segments = payload.segments, !segments.isEmpty {
-                return segments.map { seg in
-                    TranscriptSegment(
-                        kind: kind,
-                        startSeconds: seg.start,
-                        endSeconds: seg.end,
-                        text: seg.text.trimmingCharacters(in: .whitespaces)
-                    )
-                }
+                return filterLoopedSegments(segments, kind: kind)
             }
             // Fallback: single-segment from text-only JSON
             let text = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,6 +69,49 @@ struct MLXWhisperTranscriber: FileTranscribing {
         } catch {
             throw MLXWhisperError.decodingFailed(underlying: error)
         }
+    }
+
+    /// gzip compression ratio above which a segment is treated as a runaway
+    /// repetition loop and dropped. Whisper's own "decoding failed" threshold
+    /// is 2.4, but legitimate speech can sit just above that (observed 2.56),
+    /// so we use a more conservative 3.0 to only catch egregious loops
+    /// (observed 10.8 for a real loop) and never normal speech.
+    static let loopCompressionRatioThreshold = 3.0
+
+    /// Drops segments flagged as repetition loops by their compression ratio,
+    /// collapsing each contiguous run of dropped segments into a single
+    /// `[inaudible]` marker so the transcript shows a gap occurred rather than
+    /// either a wall of repeated text or a silent disappearance.
+    private static func filterLoopedSegments(_ segments: [WhisperSegment], kind: AudioKind) -> [TranscriptSegment] {
+        var out: [TranscriptSegment] = []
+        var runStart: Double?
+        var runEnd: Double = 0
+        var droppedCount = 0
+
+        func flushRun() {
+            guard let start = runStart else { return }
+            out.append(TranscriptSegment(kind: kind, startSeconds: start, endSeconds: runEnd, text: "[inaudible]"))
+            runStart = nil
+        }
+
+        for seg in segments {
+            if (seg.compressionRatio ?? 0) > loopCompressionRatioThreshold {
+                if runStart == nil { runStart = seg.start }
+                runEnd = seg.end
+                droppedCount += 1
+                continue
+            }
+            flushRun()
+            let text = seg.text.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            out.append(TranscriptSegment(kind: kind, startSeconds: seg.start, endSeconds: seg.end, text: text))
+        }
+        flushRun()
+
+        if droppedCount > 0 {
+            log.warning("dropped \(droppedCount, privacy: .public) looped segment(s) (compression ratio > \(loopCompressionRatioThreshold, privacy: .public))")
+        }
+        return out
     }
 
     /// Python's `json.dump` (which mlx_whisper uses with the default
@@ -140,5 +176,11 @@ struct MLXWhisperTranscriber: FileTranscribing {
         let start: Double
         let end: Double
         let text: String
+        let compressionRatio: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case start, end, text
+            case compressionRatio = "compression_ratio"
+        }
     }
 }

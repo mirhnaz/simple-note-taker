@@ -233,6 +233,14 @@ enum MLXWhisperEnvironment {
             // language. Empty string lets mlx_whisper auto-detect as before.
             args.append(contentsOf: ["--language", trimmedLanguage])
         }
+        // Don't feed each window's output back as the next window's prompt.
+        // With conditioning on, a single repetition ("...the one thing I really
+        // liked...") becomes the prompt for the next window and the model loops
+        // for minutes — and mlx_whisper's CLI takes only a scalar --temperature
+        // (no fallback schedule), so the compression-ratio failure check has no
+        // higher temperature to re-decode at. Disabling conditioning is the
+        // documented fix ("less prone to getting stuck in a failure loop").
+        args.append(contentsOf: ["--condition-on-previous-text", "False"])
         process.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = augmentedPATH
