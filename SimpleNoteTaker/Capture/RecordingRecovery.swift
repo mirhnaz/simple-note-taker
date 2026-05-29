@@ -57,6 +57,7 @@ enum RecordingRecovery {
             try Paths.ensureDirectoryExists(Paths.applicationSupportDirectory)
             let data = try JSONEncoder().encode(marker)
             try data.write(to: markerURL)
+            log.info("wrote recording marker at \(markerURL.path(percentEncoded: false), privacy: .public) mic=\(marker.micPath ?? "nil", privacy: .public) system=\(marker.systemPath ?? "nil", privacy: .public)")
         } catch {
             log.warning("couldn't write recording marker: \(error.localizedDescription, privacy: .public)")
         }
@@ -70,15 +71,26 @@ enum RecordingRecovery {
     /// Returns a pending marker only if one exists AND it still points at
     /// recoverable audio; otherwise clears any stale marker and returns nil.
     static func pending() -> Marker? {
-        guard let data = try? Data(contentsOf: markerURL),
-              let marker = try? JSONDecoder().decode(Marker.self, from: data) else {
+        guard let data = try? Data(contentsOf: markerURL) else {
+            log.info("no recording marker at \(markerURL.path(percentEncoded: false), privacy: .public)")
             return nil
         }
-        guard marker.hasRecoverableAudio else {
-            log.info("stale recording marker with no recoverable audio; clearing")
+        guard let marker = try? JSONDecoder().decode(Marker.self, from: data) else {
+            log.warning("recording marker present but undecodable; clearing")
             clear()
             return nil
         }
+        // Log each referenced file's size so a "no prompt" result is diagnosable.
+        for (kind, url) in marker.audioURLs {
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))[.size] as? Int) ?? nil
+            log.info("marker audio \(kind.rawValue, privacy: .public): \(url.path(percentEncoded: false), privacy: .public) size=\(size ?? -1, privacy: .public)")
+        }
+        guard marker.hasRecoverableAudio else {
+            log.info("recording marker found but no recoverable audio (files missing/empty); clearing")
+            clear()
+            return nil
+        }
+        log.info("recording marker is recoverable; prompting")
         return marker
     }
 }

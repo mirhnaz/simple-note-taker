@@ -45,15 +45,7 @@ struct MainWindow: View {
         "\(llmProviderRaw)|\(ollamaBaseURL)|\(ollamaModel)"
     }
 
-    /// Drives the crash-recovery alert. Dismissing via "Later" only clears the
-    /// in-memory prompt (the on-disk marker stays, so it re-prompts next
-    /// launch); Recover/Discard clear the marker themselves.
-    private var recoveryAlertBinding: Binding<Bool> {
-        Binding(
-            get: { controller.pendingRecovery != nil },
-            set: { shown in if !shown { controller.dismissRecoveryForNow() } }
-        )
-    }
+    @State private var showRecoveryAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,11 +62,14 @@ struct MainWindow: View {
         .task(id: summarizerSettingsFingerprint) {
             await controller.refreshSummarizerStatus()
         }
-        .task { controller.checkForCrashRecovery() }
-        .alert("Recover interrupted meeting?", isPresented: recoveryAlertBinding, presenting: controller.pendingRecovery) { marker in
+        .task {
+            controller.checkForCrashRecovery()
+            showRecoveryAlert = controller.pendingRecovery != nil
+        }
+        .alert("Recover interrupted meeting?", isPresented: $showRecoveryAlert, presenting: controller.pendingRecovery) { marker in
             Button("Recover") { Task { await controller.recoverPendingMeeting() } }
             Button("Discard", role: .destructive) { controller.discardPendingRecovery() }
-            Button("Later", role: .cancel) { }
+            Button("Later", role: .cancel) { controller.dismissRecoveryForNow() }
         } message: { marker in
             Text("A recording from \(marker.startedAt.formatted(date: .abbreviated, time: .shortened)) didn't finish — the app may have quit unexpectedly. Recover it by transcribing the audio that was saved.")
         }
